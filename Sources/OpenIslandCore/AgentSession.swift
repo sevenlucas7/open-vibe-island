@@ -106,6 +106,13 @@ public enum SessionPhase: String, Codable, Sendable {
     }
 }
 
+public enum SessionPriority: String, Codable, Sendable {
+    case critical
+    case high
+    case normal
+    case low
+}
+
 public struct JumpTarget: Equatable, Codable, Sendable {
     public var terminalApp: String
     public var workspaceName: String
@@ -310,6 +317,12 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
     public var claudeMetadata: ClaudeSessionMetadata?
     public var openCodeMetadata: OpenCodeSessionMetadata?
     public var cursorMetadata: CursorSessionMetadata?
+    public var ownerDisplayName: String?
+    public var teamRole: String?
+    public var projectTag: String?
+    public var priority: SessionPriority?
+    public var isBlocked: Bool
+    public var blockerSummary: String?
 
     /// Whether this session originates from a remote (SSH) connection.
     public var isRemote: Bool = false
@@ -347,7 +360,13 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         codexMetadata: CodexSessionMetadata? = nil,
         claudeMetadata: ClaudeSessionMetadata? = nil,
         openCodeMetadata: OpenCodeSessionMetadata? = nil,
-        cursorMetadata: CursorSessionMetadata? = nil
+        cursorMetadata: CursorSessionMetadata? = nil,
+        ownerDisplayName: String? = nil,
+        teamRole: String? = nil,
+        projectTag: String? = nil,
+        priority: SessionPriority? = nil,
+        isBlocked: Bool = false,
+        blockerSummary: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -364,6 +383,12 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         self.claudeMetadata = claudeMetadata
         self.openCodeMetadata = openCodeMetadata
         self.cursorMetadata = cursorMetadata
+        self.ownerDisplayName = ownerDisplayName
+        self.teamRole = teamRole
+        self.projectTag = projectTag
+        self.priority = priority
+        self.isBlocked = isBlocked
+        self.blockerSummary = blockerSummary
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -382,6 +407,12 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         case claudeMetadata
         case openCodeMetadata
         case cursorMetadata
+        case ownerDisplayName
+        case teamRole
+        case projectTag
+        case priority
+        case isBlocked
+        case blockerSummary
     }
 
     public init(from decoder: any Decoder) throws {
@@ -401,6 +432,12 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         claudeMetadata = try container.decodeIfPresent(ClaudeSessionMetadata.self, forKey: .claudeMetadata)
         openCodeMetadata = try container.decodeIfPresent(OpenCodeSessionMetadata.self, forKey: .openCodeMetadata)
         cursorMetadata = try container.decodeIfPresent(CursorSessionMetadata.self, forKey: .cursorMetadata)
+        ownerDisplayName = try container.decodeIfPresent(String.self, forKey: .ownerDisplayName)
+        teamRole = try container.decodeIfPresent(String.self, forKey: .teamRole)
+        projectTag = try container.decodeIfPresent(String.self, forKey: .projectTag)
+        priority = try container.decodeIfPresent(SessionPriority.self, forKey: .priority)
+        isBlocked = try container.decodeIfPresent(Bool.self, forKey: .isBlocked) ?? false
+        blockerSummary = try container.decodeIfPresent(String.self, forKey: .blockerSummary)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -420,6 +457,12 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         try container.encodeIfPresent(claudeMetadata, forKey: .claudeMetadata)
         try container.encodeIfPresent(openCodeMetadata, forKey: .openCodeMetadata)
         try container.encodeIfPresent(cursorMetadata, forKey: .cursorMetadata)
+        try container.encodeIfPresent(ownerDisplayName, forKey: .ownerDisplayName)
+        try container.encodeIfPresent(teamRole, forKey: .teamRole)
+        try container.encodeIfPresent(projectTag, forKey: .projectTag)
+        try container.encodeIfPresent(priority, forKey: .priority)
+        try container.encode(isBlocked, forKey: .isBlocked)
+        try container.encodeIfPresent(blockerSummary, forKey: .blockerSummary)
     }
 }
 

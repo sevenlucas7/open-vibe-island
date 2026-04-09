@@ -1,11 +1,13 @@
 <p align="center">
-  <img src="Assets/Brand/app-icon-cat.png" alt="Open Island" width="128" height="128">
+  <img src="Assets/Brand/app-icon-cat.png" alt="Open Vibe Island for Xteam" width="128" height="128">
 </p>
 
-<h1 align="center">Open Island</h1>
+<h1 align="center">Open Vibe Island for Xteam</h1>
+
+> Fork note: `Open Vibe Island for Xteam` is a targeted fork focused on team-aware session visibility, team cockpit orientation, and Xteam workflow optimization.
 
 <p align="center">
-  The open-source macOS companion for AI coding agents.
+  The open-source macOS team cockpit for AI coding agents.
   <br>
   <a href="README.zh-CN.md">中文</a> | <strong>English</strong>
 </p>
@@ -27,7 +29,7 @@
 
 ## 📰 News
 
-> Open Island is evolving fast — here's what's new.
+> Open Vibe Island for Xteam is evolving fast — here's what's new.
 
 - **2026-04-08** 🔐 **v1.0.0 → v1.0.7** released — First signed & notarized build. Added multi-agent support (**Qoder**, **Factory**, **CodeBuddy**), Intel Mac support, approval UI, Sparkle auto-update, and animation polish.
 
@@ -43,7 +45,7 @@ This section is written for humans.
 
 ### What This Is
 
-An open-source [Vibe Island](https://vibeisland.app/) alternative for heavy code-agent users on macOS. Currently supports **Claude Code**, **Codex**, **Cursor**, **OpenCode**, **Qoder**, **Factory**, and **CodeBuddy**, with terminal integration for **Terminal.app**, **Ghostty**, **cmux**, **Kaku**, **WezTerm**, **iTerm2**, and **Zellij**, plus fallback detection for Warp.
+`Open Vibe Island for Xteam` is an open-source [Vibe Island](https://vibeisland.app/) alternative for heavy code-agent users on macOS, with a fork-specific focus on team-aware visibility and cockpit-style coordination. Currently supports **Claude Code**, **Codex**, **Cursor**, **OpenCode**, **Qoder**, **Factory**, and **CodeBuddy**, with terminal integration for **Terminal.app**, **Ghostty**, **cmux**, **Kaku**, **WezTerm**, **iTerm2**, and **Zellij**, plus fallback detection for Warp.
 
 This is a community project. We provide the basics: code agent communication, a mac island app shell, and some fundamental features. We welcome anyone to build on top of this and turn ideas into real features for everyone. Read the [Roadmap](docs/roadmap.md) and [Contributing](CONTRIBUTING.md) docs for more info.
 
@@ -126,7 +128,7 @@ If you run into a problem, copy the prompt below into your code agent (Claude Co
 <summary>Click to expand the prompt</summary>
 
 ```
-I'm having an issue with Open Island (https://github.com/Octane0411/open-vibe-island).
+I'm having an issue with Open Vibe Island for Xteam (https://github.com/Octane0411/open-vibe-island).
 
 Please help me file a GitHub issue. Do the following:
 
@@ -174,15 +176,15 @@ Repository: Octane0411/open-vibe-island
 
 This section is written for agents.
 
-The open-source macOS companion for terminal-native AI coding.
+The open-source macOS team cockpit for terminal-native AI coding.
 
-`Open Island` puts a lightweight control surface in your notch or top bar so you can keep an eye on live coding agents, follow session progress, and jump back to the right terminal without breaking flow.
+`Open Vibe Island for Xteam` puts a lightweight control surface in your notch or top bar so you can keep an eye on live coding agents, follow session progress, and jump back to the right terminal without breaking flow.
 
 ## Why This Product Exists
 
 AI coding is becoming part of the daily development loop, but the surrounding control layer still too often means handing your machine over to a closed-source paid app.
 
-`Open Island` takes the opposite approach:
+`Open Vibe Island for Xteam` takes the opposite approach:
 
 - Open source
 - Local first, no server dependency
