@@ -50,7 +50,7 @@ This section is written for humans.
 This is a community project. We provide the basics: code agent communication, a mac island app shell, and some fundamental features. We welcome anyone to build on top of this and turn ideas into real features for everyone. Read the [Roadmap](docs/roadmap.md) and [Contributing](CONTRIBUTING.md) docs for more info.
 
 <p align="center">
-  <img src="docs/images/screenshot-overview.png" alt="Open Island screenshot" width="720">
+  <img src="docs/images/screenshot-overview.png" alt="Open Vibe Island for Xteam screenshot" width="720">
 </p>
 
 ### Motivation
@@ -71,7 +71,7 @@ I do not want to run a closed-source paid app on my own computer just to monitor
 The project is still at an early stage — you may encounter issues along the way. Join the WeChat group or Discord for faster feedback and higher resolution priority.
 We welcome any issues and pull requests. We are also looking for others to join as maintainers. WeChat group:
 
-<img src="docs/images/wechat-group.jpg" alt="Open Island WeChat group QR code" width="360">
+<img src="docs/images/wechat-group.jpg" alt="Open Vibe Island for Xteam WeChat group QR code" width="360">
 
 ### Notes
 
@@ -135,8 +135,8 @@ Please help me file a GitHub issue. Do the following:
 1. Collect my environment info:
    - Run `sw_vers` to get macOS version
    - Run `swift --version` to get Swift version
-   - Check if Open Island is running: `ps aux | grep -i "open.island\|OpenIslandApp" | grep -v grep`
-   - Get the app version: `defaults read ~/Applications/Open\ Island\ Dev.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo "unknown"`
+   - Check if Open Vibe Island for Xteam is running: `ps aux | grep -i "open.island\|OpenIslandApp" | grep -v grep`
+   - Get the app version from the local dev app bundle: `defaults read ~/Applications/Open\ Island\ Dev.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo "unknown"`
    - Check which terminal I'm using
 
 2. Ask me to describe:

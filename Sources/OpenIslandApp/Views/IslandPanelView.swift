@@ -995,6 +995,23 @@ private struct IslandSessionRow: View {
         let tone: Tone
     }
 
+    private enum RowPalette {
+        static let agentAlive = Color(red: 0.37, green: 0.92, blue: 0.83)
+        static let ownerLuvian = Color(red: 0.31, green: 0.79, blue: 0.71)
+        static let ownerFanshu = Color(red: 0.96, green: 0.45, blue: 0.71)
+        static let ownerPipi = Color(red: 0.38, green: 0.65, blue: 0.98)
+        static let ownerMomo = Color(red: 0.65, green: 0.55, blue: 0.98)
+        static let warning = Color(red: 0.96, green: 0.62, blue: 0.04)
+        static let warningSoft = Color(red: 0.96, green: 0.70, blue: 0.24)
+        static let danger = Color(red: 0.94, green: 0.27, blue: 0.27)
+        static let completed = Color(red: 0.38, green: 0.65, blue: 0.98)
+        static let unknownOwner = Color(red: 0.31, green: 0.34, blue: 0.44)
+        static let surfaceBase = Color(red: 0.07, green: 0.08, blue: 0.13)
+        static let surfaceElevated = Color(red: 0.10, green: 0.12, blue: 0.18)
+        static let surfaceWarning = Color(red: 0.16, green: 0.13, blue: 0.06)
+        static let surfaceCritical = Color(red: 0.16, green: 0.10, blue: 0.10)
+    }
+
     var body: some View {
         rowBody(referenceDate: referenceDate)
     }
@@ -1132,7 +1149,7 @@ private struct IslandSessionRow: View {
         .overlay(alignment: .leading) {
             if displayOwner == "Seven" {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(Color(red: 0.37, green: 0.92, blue: 0.83).opacity(isHighlighted || isActionable ? 0.82 : 0.56))
+                    .fill(RowPalette.agentAlive.opacity(isHighlighted || isActionable ? 0.82 : 0.56))
                     .frame(width: 2)
                     .padding(.vertical, 12)
                     .padding(.leading, 8)
@@ -1283,9 +1300,9 @@ private struct IslandSessionRow: View {
     private var phaseBadgeBackgroundColor: Color {
         switch session.phase {
         case .running:
-            return Color(red: 0.10, green: 0.18, blue: 0.17)
+            return RowPalette.surfaceElevated
         case .waitingForApproval, .waitingForAnswer:
-            return Color(red: 0.16, green: 0.13, blue: 0.06)
+            return RowPalette.surfaceWarning
         case .completed:
             return Color(red: 0.12, green: 0.15, blue: 0.22)
         }
@@ -1294,9 +1311,9 @@ private struct IslandSessionRow: View {
     private var phaseBadgeForegroundColor: Color {
         switch session.phase {
         case .running:
-            return Color(red: 0.37, green: 0.92, blue: 0.83)
+            return RowPalette.agentAlive
         case .waitingForApproval, .waitingForAnswer:
-            return Color(red: 0.96, green: 0.62, blue: 0.04)
+            return RowPalette.warning
         case .completed:
             return Color(red: 0.56, green: 0.63, blue: 0.76)
         }
@@ -1314,7 +1331,11 @@ private struct IslandSessionRow: View {
     }
 
     private func shouldShowDetailLine(showsExpandedContent: Bool) -> Bool {
-        displayBlockedState || showsExpandedContent || isActionable
+        guard detailLineText != nil else {
+            return false
+        }
+
+        return displayBlockedState || showsExpandedContent || isActionable
     }
 
     private var toolSymbol: String {
@@ -1338,13 +1359,13 @@ private struct IslandSessionRow: View {
     private var actionableStatusTint: Color {
         switch session.phase {
         case .waitingForApproval:
-            Color(red: 0.96, green: 0.62, blue: 0.04)
+            RowPalette.warning
         case .waitingForAnswer:
-            Color(red: 0.96, green: 0.62, blue: 0.04)
+            RowPalette.warning
         case .running:
-            Color(red: 0.37, green: 0.92, blue: 0.83)
+            RowPalette.agentAlive
         case .completed:
-            Color(red: 0.38, green: 0.65, blue: 0.98)
+            RowPalette.completed
         }
     }
 
@@ -1617,36 +1638,33 @@ private struct IslandSessionRow: View {
         case .owner:
             let ownerColor = ownerColor(for: badge.title)
             return (
-                background: Color(red: 0.10, green: 0.12, blue: 0.18).opacity(dimmedOpacity),
+                background: RowPalette.surfaceElevated.opacity(dimmedOpacity),
                 border: ownerColor.opacity(0.28 * dimmedOpacity),
                 foreground: ownerColor.opacity(dimmedOpacity)
             )
         case .blocked:
-            let amber = Color(red: 0.96, green: 0.62, blue: 0.04)
             return (
-                background: Color(red: 0.16, green: 0.13, blue: 0.06).opacity(dimmedOpacity),
-                border: amber.opacity(0.24 * dimmedOpacity),
-                foreground: amber.opacity(dimmedOpacity)
+                background: RowPalette.surfaceWarning.opacity(dimmedOpacity),
+                border: RowPalette.warning.opacity(0.24 * dimmedOpacity),
+                foreground: RowPalette.warning.opacity(dimmedOpacity)
             )
         case let .priority(priority):
             switch priority {
             case .critical:
-                let red = Color(red: 0.94, green: 0.27, blue: 0.27)
                 return (
-                    background: Color(red: 0.16, green: 0.10, blue: 0.10).opacity(dimmedOpacity),
-                    border: red.opacity(0.26 * dimmedOpacity),
-                    foreground: red.opacity(dimmedOpacity)
+                    background: RowPalette.surfaceCritical.opacity(dimmedOpacity),
+                    border: RowPalette.danger.opacity(0.26 * dimmedOpacity),
+                    foreground: RowPalette.danger.opacity(dimmedOpacity)
                 )
             case .high:
-                let amber = Color(red: 0.96, green: 0.62, blue: 0.04)
                 return (
-                    background: Color(red: 0.16, green: 0.13, blue: 0.06).opacity(dimmedOpacity),
-                    border: amber.opacity(0.24 * dimmedOpacity),
-                    foreground: amber.opacity(dimmedOpacity)
+                    background: RowPalette.surfaceWarning.opacity(dimmedOpacity),
+                    border: RowPalette.warning.opacity(0.24 * dimmedOpacity),
+                    foreground: RowPalette.warning.opacity(dimmedOpacity)
                 )
             case .normal:
                 return (
-                    background: Color(red: 0.07, green: 0.08, blue: 0.13).opacity(dimmedOpacity),
+                    background: RowPalette.surfaceBase.opacity(dimmedOpacity),
                     border: Color.white.opacity(0.08 * dimmedOpacity),
                     foreground: Color.white.opacity(0.48 * dimmedOpacity)
                 )
@@ -1658,11 +1676,10 @@ private struct IslandSessionRow: View {
                 )
             }
         case .project:
-            let projectColor = Color(red: 0.31, green: 0.79, blue: 0.71)
             return (
                 background: Color(red: 0.09, green: 0.13, blue: 0.15).opacity(dimmedOpacity),
-                border: projectColor.opacity(0.18 * dimmedOpacity),
-                foreground: projectColor.opacity(0.88 * dimmedOpacity)
+                border: RowPalette.ownerLuvian.opacity(0.18 * dimmedOpacity),
+                foreground: RowPalette.ownerLuvian.opacity(0.88 * dimmedOpacity)
             )
         }
     }
@@ -1670,17 +1687,17 @@ private struct IslandSessionRow: View {
     private func ownerColor(for owner: String) -> Color {
         switch owner {
         case "Seven":
-            return Color(red: 0.37, green: 0.92, blue: 0.83)
+            return RowPalette.agentAlive
         case "Luvian":
-            return Color(red: 0.31, green: 0.79, blue: 0.71)
+            return RowPalette.ownerLuvian
         case "Fanshu":
-            return Color(red: 0.96, green: 0.45, blue: 0.71)
+            return RowPalette.ownerFanshu
         case "Pipi":
-            return Color(red: 0.38, green: 0.65, blue: 0.98)
+            return RowPalette.ownerPipi
         case "Momo":
-            return Color(red: 0.65, green: 0.55, blue: 0.98)
+            return RowPalette.ownerMomo
         default:
-            return Color(red: 0.31, green: 0.34, blue: 0.44)
+            return RowPalette.unknownOwner
         }
     }
 
@@ -1699,26 +1716,26 @@ private struct IslandSessionRow: View {
 
     private var rowBackgroundColor: Color {
         let base = isActionable
-            ? Color(red: 0.10, green: 0.12, blue: 0.18)
-            : Color(red: 0.07, green: 0.08, blue: 0.13)
+            ? RowPalette.surfaceElevated
+            : RowPalette.surfaceBase
         let highlightBoost = isHighlighted ? 0.05 : 0
         return base.opacity(0.94 + highlightBoost)
     }
 
     private func statusTint(for presence: IslandSessionPresence) -> Color {
         if session.phase == .waitingForApproval {
-            return Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.94)
+            return RowPalette.warning.opacity(0.94)
         }
 
         if session.phase == .waitingForAnswer {
-            return Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.96)
+            return RowPalette.warning.opacity(0.96)
         }
 
         switch presence {
         case .running:
-            return Color(red: 0.37, green: 0.92, blue: 0.83)
+            return RowPalette.agentAlive
         case .active:
-            return Color(red: 0.31, green: 0.79, blue: 0.71)
+            return RowPalette.ownerLuvian
         case .inactive:
             return .white.opacity(0.38)
         }
@@ -1726,12 +1743,12 @@ private struct IslandSessionRow: View {
 
     private func detailLineColor(for presence: IslandSessionPresence) -> Color {
         if displayBlockedState {
-            return Color(red: 0.96, green: 0.70, blue: 0.24).opacity(0.94)
+            return RowPalette.warningSoft.opacity(0.94)
         }
 
         switch session.spotlightActivityTone {
         case .attention:
-            return Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.94)
+            return RowPalette.warning.opacity(0.94)
         case .live:
             return statusTint(for: presence)
         case .idle:
