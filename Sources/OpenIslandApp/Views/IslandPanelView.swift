@@ -56,11 +56,10 @@ extension AgentSession {
     /// Estimated row height matching `IslandSessionRow` layout for viewport sizing.
     func estimatedIslandRowHeight(at date: Date) -> CGFloat {
         let presence = islandPresence(at: date)
-        // Base: vertical padding (28) + headline (~18) + rounding (2)
-        var height: CGFloat = 48
+        // Base: row padding + headline + badge lane.
+        var height: CGFloat = 72
         guard presence != .inactive else { return height }
-        if spotlightPromptLineText != nil { height += 24 }   // spacing (8) + text (16)
-        if spotlightActivityLineText != nil { height += 22 }  // spacing (8) + text (14)
+        if spotlightPromptLineText != nil || spotlightActivityLineText != nil { height += 22 }
         if let subagents = claudeMetadata?.activeSubagents, !subagents.isEmpty {
             height += 22  // spacing (8) + header (14)
             height += CGFloat(subagents.count) * 18  // each subagent row (spacing 4 + text 14)
@@ -517,6 +516,7 @@ struct IslandPanelView: View {
         VStack(spacing: 6) {
             if isNotificationMode, let session = model.activeIslandCardSession {
                 IslandSessionRow(
+                    model: model,
                     session: session,
                     referenceDate: context.date,
                     isActionable: true,
@@ -544,6 +544,7 @@ struct IslandPanelView: View {
             } else {
                 ForEach(model.islandListSessions) { session in
                     IslandSessionRow(
+                        model: model,
                         session: session,
                         referenceDate: context.date,
                         isActionable: session.phase.requiresAttention || session.id == actionableSessionID,
@@ -966,6 +967,7 @@ private struct OpenedHeaderMetrics {
 // MARK: - Session row (opened state)
 
 private struct IslandSessionRow: View {
+    let model: AppModel
     let session: AgentSession
     let referenceDate: Date
     var isActionable: Bool = false
@@ -978,6 +980,20 @@ private struct IslandSessionRow: View {
 
     @State private var isHighlighted = false
     @State private var isManuallyExpanded = false
+
+    private struct BadgeModel: Identifiable {
+        enum Tone {
+            case owner
+            case blocked
+            case priority(SessionPriority)
+            case project
+        }
+
+        let id: String
+        let title: String
+        let icon: String?
+        let tone: Tone
+    }
 
     var body: some View {
         rowBody(referenceDate: referenceDate)
@@ -992,7 +1008,7 @@ private struct IslandSessionRow: View {
                 statusDot(for: presence)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(session.spotlightHeadlineText)
                             .font(.system(size: isActionable ? 15 : 14, weight: .semibold))
                             .foregroundStyle(headlineColor(for: presence))
@@ -1001,31 +1017,30 @@ private struct IslandSessionRow: View {
                         Spacer(minLength: 8)
 
                         HStack(spacing: 6) {
-                            compactBadge(session.tool.displayName, presence: presence)
-                            if session.isRemote {
-                                compactBadge("SSH", presence: presence, icon: "network")
-                            }
-                            if let terminalBadge = session.spotlightTerminalBadge {
-                                compactBadge(terminalBadge, presence: presence)
-                            }
-                            compactBadge(session.spotlightAgeBadge, presence: presence)
+                            Image(systemName: toolSymbol)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white.opacity(presence == .inactive ? 0.36 : 0.58))
+
+                            phaseBadge
                         }
                     }
 
-                    if showsExpandedContent || isActionable,
-                       let promptLine = session.spotlightPromptLineText ?? expandedPromptLineText {
-                        Text(promptLine)
-                            .font(.system(size: 11.5, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.62))
-                            .lineLimit(1)
+                    if !metadataBadges.isEmpty {
+                        badgeLane(presence: presence)
                     }
 
-                    if showsExpandedContent || isActionable,
-                       let activityLine = session.spotlightActivityLineText ?? expandedActivityLineText {
-                        Text(activityLine)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(activityColor(for: presence).opacity(0.94))
-                            .lineLimit(1)
+                    if shouldShowDetailLine(showsExpandedContent: showsExpandedContent),
+                       let detailLine = detailLineText {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Image(systemName: toolSymbol)
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(detailLineColor(for: presence).opacity(0.84))
+
+                            Text(detailLine)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(detailLineColor(for: presence))
+                                .lineLimit(2)
+                        }
                     }
 
                     if showsExpandedContent,
@@ -1108,12 +1123,21 @@ private struct IslandSessionRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: isActionable ? 24 : 22, style: .continuous)
-                .fill(isHighlighted ? Color.white.opacity(isActionable ? 0.06 : 0.05) : Color.black)
+                .fill(rowBackgroundColor)
         )
         .overlay(
             RoundedRectangle(cornerRadius: isActionable ? 24 : 22, style: .continuous)
                 .strokeBorder(actionableBorderColor)
         )
+        .overlay(alignment: .leading) {
+            if displayOwner == "Seven" {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color(red: 0.37, green: 0.92, blue: 0.83).opacity(isHighlighted || isActionable ? 0.82 : 0.56))
+                    .frame(width: 2)
+                    .padding(.vertical, 12)
+                    .padding(.leading, 8)
+            }
+        }
         .compositingGroup()
         .shadow(color: .black.opacity(0.24), radius: isHighlighted ? 8 : 0, y: isHighlighted ? 6 : 0)
         .overlay(
@@ -1141,6 +1165,169 @@ private struct IslandSessionRow: View {
         }
     }
 
+    private var displayOwner: String? {
+        model.displayOwner(for: session)
+    }
+
+    private var displayProjectTag: String? {
+        model.displayProjectTag(for: session)
+    }
+
+    private var displayBlockedState: Bool {
+        model.displayBlockedState(for: session)
+    }
+
+    private var displayPriority: SessionPriority? {
+        model.displayPriority(for: session)
+    }
+
+    private var displayBlockerSummary: String? {
+        model.displayBlockerSummary(for: session)
+    }
+
+    private var metadataBadges: [BadgeModel] {
+        var badges: [BadgeModel] = []
+
+        if let owner = displayOwner {
+            badges.append(
+                BadgeModel(
+                    id: "owner",
+                    title: owner,
+                    icon: "person.crop.circle.fill",
+                    tone: .owner
+                )
+            )
+        }
+
+        if displayBlockedState {
+            badges.append(
+                BadgeModel(
+                    id: "blocked",
+                    title: "Blocked",
+                    icon: "pause.circle.fill",
+                    tone: .blocked
+                )
+            )
+        }
+
+        if let priority = displayPriority,
+           priority == .critical || (priority == .high && !displayBlockedState) {
+            badges.append(
+                BadgeModel(
+                    id: "priority-\(priority.rawValue)",
+                    title: priorityBadgeTitle(priority),
+                    icon: priority == .critical ? "exclamationmark.octagon.fill" : "arrow.up.circle.fill",
+                    tone: .priority(priority)
+                )
+            )
+        }
+
+        if let projectTag = displayProjectTag,
+           badges.count < 3 {
+            badges.append(
+                BadgeModel(
+                    id: "project",
+                    title: projectTag,
+                    icon: "shippingbox.fill",
+                    tone: .project
+                )
+            )
+        }
+
+        return Array(badges.prefix(3))
+    }
+
+    @ViewBuilder
+    private func badgeLane(presence: IslandSessionPresence) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                ForEach(metadataBadges) { badge in
+                    metadataBadge(badge, presence: presence)
+                }
+            }
+
+            HStack(spacing: 6) {
+                ForEach(Array(metadataBadges.prefix(2))) { badge in
+                    metadataBadge(badge, presence: presence)
+                }
+            }
+        }
+    }
+
+    private var phaseBadge: some View {
+        Text(phaseBadgeTitle)
+            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+            .foregroundStyle(phaseBadgeForegroundColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(phaseBadgeBackgroundColor, in: Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(phaseBadgeForegroundColor.opacity(0.22), lineWidth: 1)
+            )
+    }
+
+    private var phaseBadgeTitle: String {
+        switch session.phase {
+        case .running:
+            return "RUNNING"
+        case .waitingForApproval:
+            return "APPROVAL"
+        case .waitingForAnswer:
+            return "ANSWER"
+        case .completed:
+            return "COMPLETE"
+        }
+    }
+
+    private var phaseBadgeBackgroundColor: Color {
+        switch session.phase {
+        case .running:
+            return Color(red: 0.10, green: 0.18, blue: 0.17)
+        case .waitingForApproval, .waitingForAnswer:
+            return Color(red: 0.16, green: 0.13, blue: 0.06)
+        case .completed:
+            return Color(red: 0.12, green: 0.15, blue: 0.22)
+        }
+    }
+
+    private var phaseBadgeForegroundColor: Color {
+        switch session.phase {
+        case .running:
+            return Color(red: 0.37, green: 0.92, blue: 0.83)
+        case .waitingForApproval, .waitingForAnswer:
+            return Color(red: 0.96, green: 0.62, blue: 0.04)
+        case .completed:
+            return Color(red: 0.56, green: 0.63, blue: 0.76)
+        }
+    }
+
+    private var detailLineText: String? {
+        if let blockerSummary = displayBlockerSummary {
+            return blockerSummary
+        }
+
+        return session.spotlightActivityLineText
+            ?? expandedActivityLineText
+            ?? session.spotlightPromptLineText
+            ?? expandedPromptLineText
+    }
+
+    private func shouldShowDetailLine(showsExpandedContent: Bool) -> Bool {
+        displayBlockedState || showsExpandedContent || isActionable
+    }
+
+    private var toolSymbol: String {
+        switch session.tool {
+        case .codex, .openCode, .qoder, .factory, .codebuddy, .geminiCLI:
+            return "terminal.fill"
+        case .claudeCode:
+            return "sparkles"
+        case .cursor:
+            return "cursorarrow.motionlines"
+        }
+    }
+
     private var actionableBorderColor: Color {
         if isActionable {
             return actionableStatusTint.opacity(isHighlighted ? 0.45 : 0.28)
@@ -1151,13 +1338,13 @@ private struct IslandSessionRow: View {
     private var actionableStatusTint: Color {
         switch session.phase {
         case .waitingForApproval:
-            .orange
+            Color(red: 0.96, green: 0.62, blue: 0.04)
         case .waitingForAnswer:
-            .yellow
+            Color(red: 0.96, green: 0.62, blue: 0.04)
         case .running:
-            Color(red: 0.34, green: 0.61, blue: 0.99)
+            Color(red: 0.37, green: 0.92, blue: 0.83)
         case .completed:
-            Color(red: 0.29, green: 0.86, blue: 0.46)
+            Color(red: 0.38, green: 0.65, blue: 0.98)
         }
     }
 
@@ -1391,62 +1578,166 @@ private struct IslandSessionRow: View {
         }
     }
 
-    private func compactBadge(
-        _ title: String,
-        presence: IslandSessionPresence,
-        icon: String? = nil
+    private func metadataBadge(
+        _ badge: BadgeModel,
+        presence: IslandSessionPresence
     ) -> some View {
-        HStack(spacing: 3) {
-            if let icon {
+        let palette = badgePalette(for: badge, presence: presence)
+
+        return HStack(spacing: 4) {
+            if let icon = badge.icon {
                 Image(systemName: icon)
-                    .font(.system(size: 7.5, weight: .semibold))
+                    .font(.system(size: 7.5, weight: .bold))
             }
-            Text(title)
-                .font(.system(size: 9, weight: .semibold))
+            Text(badge.title)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .lineLimit(1)
         }
-        .foregroundStyle(badgeTextColor(for: presence))
+        .foregroundStyle(palette.foreground)
         .padding(.horizontal, 7)
-        .padding(.vertical, 3.5)
-        .background(Color(red: 0.14, green: 0.14, blue: 0.15), in: Capsule())
+        .padding(.vertical, 4)
+        .background(palette.background, in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(palette.border, lineWidth: 1)
+        )
     }
 
     private func headlineColor(for presence: IslandSessionPresence) -> Color {
         presence == .inactive ? .white.opacity(0.78) : .white
     }
 
-    private func badgeTextColor(for presence: IslandSessionPresence) -> Color {
-        presence == .inactive ? .white.opacity(0.42) : .white.opacity(0.56)
+    private func badgePalette(
+        for badge: BadgeModel,
+        presence: IslandSessionPresence
+    ) -> (background: Color, border: Color, foreground: Color) {
+        let dimmedOpacity = presence == .inactive ? 0.72 : 1.0
+
+        switch badge.tone {
+        case .owner:
+            let ownerColor = ownerColor(for: badge.title)
+            return (
+                background: Color(red: 0.10, green: 0.12, blue: 0.18).opacity(dimmedOpacity),
+                border: ownerColor.opacity(0.28 * dimmedOpacity),
+                foreground: ownerColor.opacity(dimmedOpacity)
+            )
+        case .blocked:
+            let amber = Color(red: 0.96, green: 0.62, blue: 0.04)
+            return (
+                background: Color(red: 0.16, green: 0.13, blue: 0.06).opacity(dimmedOpacity),
+                border: amber.opacity(0.24 * dimmedOpacity),
+                foreground: amber.opacity(dimmedOpacity)
+            )
+        case let .priority(priority):
+            switch priority {
+            case .critical:
+                let red = Color(red: 0.94, green: 0.27, blue: 0.27)
+                return (
+                    background: Color(red: 0.16, green: 0.10, blue: 0.10).opacity(dimmedOpacity),
+                    border: red.opacity(0.26 * dimmedOpacity),
+                    foreground: red.opacity(dimmedOpacity)
+                )
+            case .high:
+                let amber = Color(red: 0.96, green: 0.62, blue: 0.04)
+                return (
+                    background: Color(red: 0.16, green: 0.13, blue: 0.06).opacity(dimmedOpacity),
+                    border: amber.opacity(0.24 * dimmedOpacity),
+                    foreground: amber.opacity(dimmedOpacity)
+                )
+            case .normal:
+                return (
+                    background: Color(red: 0.07, green: 0.08, blue: 0.13).opacity(dimmedOpacity),
+                    border: Color.white.opacity(0.08 * dimmedOpacity),
+                    foreground: Color.white.opacity(0.48 * dimmedOpacity)
+                )
+            case .low:
+                return (
+                    background: Color.white.opacity(0.02 * dimmedOpacity),
+                    border: Color.white.opacity(0.05 * dimmedOpacity),
+                    foreground: Color.white.opacity(0.36 * dimmedOpacity)
+                )
+            }
+        case .project:
+            let projectColor = Color(red: 0.31, green: 0.79, blue: 0.71)
+            return (
+                background: Color(red: 0.09, green: 0.13, blue: 0.15).opacity(dimmedOpacity),
+                border: projectColor.opacity(0.18 * dimmedOpacity),
+                foreground: projectColor.opacity(0.88 * dimmedOpacity)
+            )
+        }
+    }
+
+    private func ownerColor(for owner: String) -> Color {
+        switch owner {
+        case "Seven":
+            return Color(red: 0.37, green: 0.92, blue: 0.83)
+        case "Luvian":
+            return Color(red: 0.31, green: 0.79, blue: 0.71)
+        case "Fanshu":
+            return Color(red: 0.96, green: 0.45, blue: 0.71)
+        case "Pipi":
+            return Color(red: 0.38, green: 0.65, blue: 0.98)
+        case "Momo":
+            return Color(red: 0.65, green: 0.55, blue: 0.98)
+        default:
+            return Color(red: 0.31, green: 0.34, blue: 0.44)
+        }
+    }
+
+    private func priorityBadgeTitle(_ priority: SessionPriority) -> String {
+        switch priority {
+        case .critical:
+            return "Critical"
+        case .high:
+            return "High"
+        case .normal:
+            return "Normal"
+        case .low:
+            return "Low"
+        }
+    }
+
+    private var rowBackgroundColor: Color {
+        let base = isActionable
+            ? Color(red: 0.10, green: 0.12, blue: 0.18)
+            : Color(red: 0.07, green: 0.08, blue: 0.13)
+        let highlightBoost = isHighlighted ? 0.05 : 0
+        return base.opacity(0.94 + highlightBoost)
     }
 
     private func statusTint(for presence: IslandSessionPresence) -> Color {
         if session.phase == .waitingForApproval {
-            return .orange.opacity(0.94)
+            return Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.94)
         }
 
         if session.phase == .waitingForAnswer {
-            return .yellow.opacity(0.96)
+            return Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.96)
         }
 
         switch presence {
         case .running:
-            return Color(red: 0.34, green: 0.61, blue: 0.99)
+            return Color(red: 0.37, green: 0.92, blue: 0.83)
         case .active:
-            return Color(red: 0.29, green: 0.86, blue: 0.46)
+            return Color(red: 0.31, green: 0.79, blue: 0.71)
         case .inactive:
             return .white.opacity(0.38)
         }
     }
 
-    private func activityColor(for presence: IslandSessionPresence) -> Color {
+    private func detailLineColor(for presence: IslandSessionPresence) -> Color {
+        if displayBlockedState {
+            return Color(red: 0.96, green: 0.70, blue: 0.24).opacity(0.94)
+        }
+
         switch session.spotlightActivityTone {
         case .attention:
-            .orange.opacity(0.94)
+            return Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.94)
         case .live:
-            statusTint(for: presence)
+            return statusTint(for: presence)
         case .idle:
-            .white.opacity(0.46)
+            return Color.white.opacity(0.46)
         case .ready:
-            presence == .inactive ? .white.opacity(0.46) : statusTint(for: presence)
+            return presence == .inactive ? Color.white.opacity(0.46) : statusTint(for: presence)
         }
     }
 }

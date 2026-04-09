@@ -707,4 +707,113 @@ struct AppModelSessionListTests {
         let claudeSessions = model.state.sessions.filter { $0.tool == .claudeCode }
         #expect(claudeSessions.count == 2)
     }
+
+    @Test
+    func displayEnrichmentDerivesOwnerProjectBlockedPriorityAndBlockerSummary() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let model = AppModel()
+        let session = AgentSession(
+            id: "approval-session",
+            title: "Codex · open-vibe-island",
+            tool: .codex,
+            origin: .live,
+            attachmentState: .attached,
+            phase: .waitingForApproval,
+            summary: "Waiting",
+            updatedAt: now,
+            permissionRequest: PermissionRequest(
+                title: "Approval needed",
+                summary: "Need approval to update AppModel.swift",
+                affectedPath: "/tmp/open-vibe-island/Sources/OpenIslandApp/AppModel.swift"
+            ),
+            jumpTarget: JumpTarget(
+                terminalApp: "Ghostty",
+                workspaceName: "open-vibe-island",
+                paneTitle: "codex ~/open-vibe-island",
+                workingDirectory: "/tmp/open-vibe-island",
+                terminalSessionID: "ghostty-approval"
+            )
+        )
+
+        #expect(model.displayOwner(for: session) == "Seven")
+        #expect(model.displayProjectTag(for: session) == "Open Vibe Island")
+        #expect(model.displayBlockedState(for: session))
+        #expect(model.displayPriority(for: session) == .high)
+        #expect(model.displayBlockerSummary(for: session) == "Need approval to update AppModel.swift")
+    }
+
+    @Test
+    func compositeSortingPrioritizesWaitingCriticalAndSevenSessions() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let model = AppModel()
+
+        var blockedApproval = AgentSession(
+            id: "blocked-approval",
+            title: "Claude · shared-workspace",
+            tool: .claudeCode,
+            origin: .live,
+            attachmentState: .attached,
+            phase: .waitingForApproval,
+            summary: "Need approval",
+            updatedAt: now.addingTimeInterval(-60),
+            permissionRequest: PermissionRequest(
+                title: "Approval needed",
+                summary: "Claude wants approval to apply a patch",
+                affectedPath: "/tmp/open-vibe-island/Sources/OpenIslandApp/Views/IslandPanelView.swift"
+            ),
+            jumpTarget: JumpTarget(
+                terminalApp: "Ghostty",
+                workspaceName: "shared-workspace",
+                paneTitle: "claude ~/shared-workspace",
+                workingDirectory: "/tmp/shared-workspace",
+                terminalSessionID: "ghostty-blocked"
+            )
+        )
+        blockedApproval.isProcessAlive = true
+
+        var criticalSession = AgentSession(
+            id: "critical-session",
+            title: "Cursor · release",
+            tool: .cursor,
+            origin: .live,
+            attachmentState: .attached,
+            phase: .running,
+            summary: "Critical fix in progress",
+            updatedAt: now.addingTimeInterval(-20),
+            jumpTarget: JumpTarget(
+                terminalApp: "Ghostty",
+                workspaceName: "release",
+                paneTitle: "cursor ~/release",
+                workingDirectory: "/tmp/release",
+                terminalSessionID: "ghostty-critical"
+            ),
+            priority: .critical
+        )
+        criticalSession.isProcessAlive = true
+
+        var sevenSession = AgentSession(
+            id: "seven-session",
+            title: "Codex · open-vibe-island",
+            tool: .codex,
+            origin: .live,
+            attachmentState: .attached,
+            phase: .running,
+            summary: "Seven is working",
+            updatedAt: now,
+            jumpTarget: JumpTarget(
+                terminalApp: "Ghostty",
+                workspaceName: "open-vibe-island",
+                paneTitle: "codex ~/open-vibe-island",
+                workingDirectory: "/tmp/open-vibe-island",
+                terminalSessionID: "ghostty-seven"
+            )
+        )
+        sevenSession.isProcessAlive = true
+
+        model.state = SessionState(
+            sessions: [sevenSession, criticalSession, blockedApproval]
+        )
+
+        #expect(model.surfacedSessions.map(\.id) == ["blocked-approval", "critical-session", "seven-session"])
+    }
 }

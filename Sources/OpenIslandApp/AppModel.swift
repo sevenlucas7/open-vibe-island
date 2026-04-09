@@ -12,6 +12,29 @@ final class AppModel {
     private static let syntheticClaudeSessionPrefix = "claude-process:"
     private static let liveSessionStalenessWindow: TimeInterval = 15 * 60
     private static let jumpOverlayDismissLeadTime: Duration = .milliseconds(20)
+    private static let prioritizedOwnerDisplayName = "Seven"
+    private static let canonicalOwnerDisplayNames: [String: String] = [
+        "seven": "Seven",
+        "claw seven": "Seven",
+        "luvian": "Luvian",
+        "claw luvian": "Luvian",
+        "fanshu": "Fanshu",
+        "claw fanshu": "Fanshu",
+        "pipi": "Pipi",
+        "claw pipi": "Pipi",
+        "momo": "Momo",
+        "claw momo": "Momo",
+    ]
+    private static let defaultOwnerDisplayNamesByTool: [AgentTool: String] = [
+        .codex: "Seven",
+        .claudeCode: "Luvian",
+        .qoder: "Fanshu",
+        .openCode: "Fanshu",
+        .factory: "Pipi",
+        .cursor: "Pipi",
+        .codebuddy: "Momo",
+        .geminiCLI: "Momo",
+    ]
     static let hoverOpenDelay: TimeInterval = 0.15
 
     struct AcceptanceStep: Identifiable {
@@ -931,8 +954,8 @@ final class AppModel {
     private func computeSessionBuckets() -> (primary: [AgentSession], overflow: [AgentSession]) {
         let now = Date.now
         let rankedSessions = state.sessions.sorted { lhs, rhs in
-            let lhsScore = displayPriority(for: lhs, now: now)
-            let rhsScore = displayPriority(for: rhs, now: now)
+            let lhsScore = sessionSortScore(for: lhs, now: now)
+            let rhsScore = sessionSortScore(for: rhs, now: now)
 
             if lhsScore == rhsScore {
                 if lhs.islandActivityDate == rhs.islandActivityDate {
@@ -965,10 +988,93 @@ final class AppModel {
         return (primary, overflow)
     }
 
-    private func displayPriority(for session: AgentSession, now: Date) -> Int {
+    func displayOwner(for session: AgentSession) -> String? {
+        if let explicitOwner = normalizedOwnerDisplayName(from: session.ownerDisplayName) {
+            return explicitOwner
+        }
+
+        return Self.defaultOwnerDisplayNamesByTool[session.tool]
+    }
+
+    func displayProjectTag(for session: AgentSession) -> String? {
+        if let explicitProjectTag = normalizedProjectTag(from: session.projectTag) {
+            return explicitProjectTag
+        }
+
+        let candidateValues = [
+            session.jumpTarget?.workspaceName,
+            session.jumpTarget?.workingDirectory,
+            session.trackingTranscriptPath,
+            session.title,
+        ]
+
+        if candidateValues.contains(where: matchesOpenVibeIslandProject) {
+            return "Open Vibe Island"
+        }
+
+        if let workspaceName = normalizedProjectTag(from: session.jumpTarget?.workspaceName) {
+            return workspaceName
+        }
+
+        if let workingDirectory = session.jumpTarget?.workingDirectory,
+           let directoryName = normalizedProjectTag(from: URL(fileURLWithPath: workingDirectory).lastPathComponent) {
+            return directoryName
+        }
+
+        if let transcriptPath = session.trackingTranscriptPath,
+           let parentName = normalizedProjectTag(from: URL(fileURLWithPath: transcriptPath).deletingLastPathComponent().lastPathComponent) {
+            return parentName
+        }
+
+        return nil
+    }
+
+    func displayBlockedState(for session: AgentSession) -> Bool {
+        session.isBlocked || session.phase.requiresAttention || displayBlockerSummary(for: session) != nil
+    }
+
+    func displayPriority(for session: AgentSession) -> SessionPriority? {
+        if let explicitPriority = session.priority {
+            return explicitPriority
+        }
+
+        if session.phase == .waitingForApproval {
+            return .high
+        }
+
+        if session.phase == .waitingForAnswer || session.isBlocked {
+            return .high
+        }
+
+        return nil
+    }
+
+    func displayBlockerSummary(for session: AgentSession) -> String? {
+        if let blockerSummary = normalizedInlineText(session.blockerSummary) {
+            return blockerSummary
+        }
+
+        switch session.phase {
+        case .waitingForApproval:
+            return normalizedInlineText(session.permissionRequest?.summary)
+                ?? normalizedInlineText(session.currentCommandPreviewText)
+                ?? "Waiting for approval"
+        case .waitingForAnswer:
+            return normalizedInlineText(session.questionPrompt?.title)
+                ?? normalizedInlineText(session.questionPrompt?.questions.first?.question)
+                ?? "Waiting for answer"
+        case .running, .completed:
+            return nil
+        }
+    }
+
+    private func sessionSortScore(for session: AgentSession, now: Date) -> Int {
         var score = 0
 
         let presence = session.islandPresence(at: now)
+        let isBlocked = displayBlockedState(for: session)
+        let priority = displayPriority(for: session)
+        let owner = displayOwner(for: session)
 
         if session.isProcessAlive {
             score += presence == .inactive ? 3_000 : 12_000
@@ -976,27 +1082,53 @@ final class AppModel {
             score += 6_000
         }
 
-        if session.phase.requiresAttention {
-            score += 10_000
-        }
-
         if session.currentToolName?.isEmpty == false {
-            score += 6_000
+            score += 2_000
         }
 
         if session.jumpTarget != nil {
-            score += 4_000
+            score += 1_500
         }
 
         switch session.phase {
-        case .running:
-            score += 2_000
         case .waitingForApproval:
-            score += 1_500
+            score += 40_000
         case .waitingForAnswer:
-            score += 1_200
+            score += 34_000
+        case .running:
+            score += 8_000
         case .completed:
-            score += 600
+            score += 500
+        }
+
+        if isBlocked {
+            score += 24_000
+        }
+
+        switch priority {
+        case .critical?:
+            score += 20_000
+        case .high?:
+            score += 13_000
+        case .normal?:
+            score += 2_500
+        case .low?:
+            score -= 1_000
+        case nil:
+            break
+        }
+
+        if owner == Self.prioritizedOwnerDisplayName {
+            score += 6_000
+        }
+
+        switch presence {
+        case .running:
+            score += 3_000
+        case .active:
+            score += 1_500
+        case .inactive:
+            score -= 500
         }
 
         let age = now.timeIntervalSince(session.islandActivityDate)
@@ -1014,6 +1146,88 @@ final class AppModel {
         }
 
         return score
+    }
+
+    private func normalizedOwnerDisplayName(from rawValue: String?) -> String? {
+        guard let normalized = normalizedLookupKey(from: rawValue) else {
+            return nil
+        }
+
+        return Self.canonicalOwnerDisplayNames[normalized]
+            ?? normalizedInlineText(rawValue)
+    }
+
+    private func normalizedProjectTag(from rawValue: String?) -> String? {
+        guard let text = normalizedInlineText(rawValue) else {
+            return nil
+        }
+
+        if matchesOpenVibeIslandProject(text) {
+            return "Open Vibe Island"
+        }
+
+        if ["workspace", "unknown", "untitled"].contains(text.lowercased()) {
+            return nil
+        }
+
+        return prettifiedTag(text)
+    }
+
+    private func matchesOpenVibeIslandProject(_ rawValue: String?) -> Bool {
+        guard let normalized = normalizedLookupKey(from: rawValue) else {
+            return false
+        }
+
+        return normalized.contains("open vibe island")
+            || normalized.contains("open-vibe-island")
+            || normalized.contains("open island")
+            || normalized.contains("open-island")
+    }
+
+    private func prettifiedTag(_ value: String) -> String {
+        let replaced = value
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+        let collapsed = replaced.split(whereSeparator: \.isWhitespace).map(String.init).joined(separator: " ")
+        guard !collapsed.isEmpty else {
+            return value
+        }
+
+        return collapsed
+            .split(separator: " ")
+            .map { token in
+                if token.count <= 3 {
+                    return token.uppercased()
+                }
+
+                return token.prefix(1).uppercased() + token.dropFirst()
+            }
+            .joined(separator: " ")
+    }
+
+    private func normalizedLookupKey(from rawValue: String?) -> String? {
+        guard let text = normalizedInlineText(rawValue) else {
+            return nil
+        }
+
+        return text
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+    }
+
+    private func normalizedInlineText(_ rawValue: String?) -> String? {
+        guard let rawValue else {
+            return nil
+        }
+
+        let cleaned = rawValue
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return cleaned.isEmpty ? nil : cleaned
     }
 
     private func describe(_ event: AgentEvent) -> String {
