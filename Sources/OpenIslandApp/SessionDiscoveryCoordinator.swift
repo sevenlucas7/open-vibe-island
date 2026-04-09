@@ -16,6 +16,8 @@ final class SessionDiscoveryCoordinator {
         var cursorRecordsNeedPrune: Bool
         var discoveredCodexRecords: [CodexTrackedSessionRecord]
         var discoveredClaudeSessions: [AgentSession]
+        var discoveredOpenClawSessions: [AgentSession]
+        var openClawStatusMessage: String?
         var hooksBinaryURL: URL?
     }
 
@@ -86,6 +88,7 @@ final class SessionDiscoveryCoordinator {
 
         let discoveredCodex = codexRolloutDiscovery.discoverRecentSessions()
         let discoveredClaude = claudeTranscriptDiscovery.discoverRecentSessions()
+        let discoveredOpenClaw = OpenClawDiscovery().discover()
 
         return StartupDiscoveryPayload(
             codexRecords: codexRecords,
@@ -96,6 +99,8 @@ final class SessionDiscoveryCoordinator {
             cursorRecordsNeedPrune: cursorRecords != allCursor,
             discoveredCodexRecords: discoveredCodex,
             discoveredClaudeSessions: discoveredClaude,
+            discoveredOpenClawSessions: discoveredOpenClaw.sessions,
+            openClawStatusMessage: discoveredOpenClaw.statusMessage,
             hooksBinaryURL: HooksBinaryLocator.locate(
                 executableDirectory: Bundle.main.executableURL?.deletingLastPathComponent()
             )
@@ -152,6 +157,15 @@ final class SessionDiscoveryCoordinator {
             onStatusMessage?("Discovered \(payload.discoveredClaudeSessions.count) recent Claude session(s) from local transcripts.")
         }
 
+        if !payload.discoveredOpenClawSessions.isEmpty {
+            let mergedSessions = mergeDiscoveredSessions(payload.discoveredOpenClawSessions)
+            state = SessionState(sessions: mergedSessions)
+        }
+
+        if let openClawStatusMessage = payload.openClawStatusMessage {
+            onStatusMessage?(openClawStatusMessage)
+        }
+
         // Sync rollout tracking with current sessions.
         refreshCodexRolloutTracking()
     }
@@ -206,7 +220,14 @@ final class SessionDiscoveryCoordinator {
         merged.jumpTarget = existing.jumpTarget ?? discovered.jumpTarget
         merged.codexMetadata = mergeCodexMetadata(existing.codexMetadata, discovered.codexMetadata)
         merged.claudeMetadata = mergeClaudeMetadata(existing.claudeMetadata, discovered.claudeMetadata)
+        merged.openCodeMetadata = mergeOpenCodeMetadata(existing.openCodeMetadata, discovered.openCodeMetadata)
         merged.cursorMetadata = mergeCursorMetadata(existing.cursorMetadata, discovered.cursorMetadata)
+        merged.ownerDisplayName = discovered.ownerDisplayName ?? existing.ownerDisplayName
+        merged.teamRole = discovered.teamRole ?? existing.teamRole
+        merged.projectTag = discovered.projectTag ?? existing.projectTag
+        merged.priority = discovered.priority ?? existing.priority
+        merged.isBlocked = discovered.isBlocked || existing.isBlocked
+        merged.blockerSummary = discovered.blockerSummary ?? existing.blockerSummary
 
         return merged
     }
@@ -302,6 +323,29 @@ final class SessionDiscoveryCoordinator {
             agentType: discovered.agentType ?? existing.agentType,
             worktreeBranch: discovered.worktreeBranch ?? existing.worktreeBranch,
             activeSubagents: existing.activeSubagents.isEmpty ? discovered.activeSubagents : existing.activeSubagents
+        )
+        return merged.isEmpty ? nil : merged
+    }
+
+    private func mergeOpenCodeMetadata(
+        _ existing: OpenCodeSessionMetadata?,
+        _ discovered: OpenCodeSessionMetadata?
+    ) -> OpenCodeSessionMetadata? {
+        guard let existing else {
+            return discovered?.isEmpty == true ? nil : discovered
+        }
+
+        guard let discovered else {
+            return existing.isEmpty ? nil : existing
+        }
+
+        let merged = OpenCodeSessionMetadata(
+            initialUserPrompt: existing.initialUserPrompt ?? discovered.initialUserPrompt ?? discovered.lastUserPrompt,
+            lastUserPrompt: discovered.lastUserPrompt ?? existing.lastUserPrompt,
+            lastAssistantMessage: discovered.lastAssistantMessage ?? existing.lastAssistantMessage,
+            currentTool: discovered.currentTool ?? existing.currentTool,
+            currentToolInputPreview: discovered.currentToolInputPreview ?? existing.currentToolInputPreview,
+            model: discovered.model ?? existing.model
         )
         return merged.isEmpty ? nil : merged
     }

@@ -5,6 +5,7 @@ public enum AgentTool: String, CaseIterable, Codable, Sendable {
     case codex
     case geminiCLI
     case openCode
+    case openClaw
     case qoder
     case factory
     case codebuddy
@@ -20,6 +21,8 @@ public enum AgentTool: String, CaseIterable, Codable, Sendable {
             "Gemini CLI"
         case .openCode:
             "OpenCode"
+        case .openClaw:
+            "OpenClaw"
         case .qoder:
             "Qoder"
         case .factory:
@@ -41,6 +44,8 @@ public enum AgentTool: String, CaseIterable, Codable, Sendable {
             "GEMINI"
         case .openCode:
             "OPENCODE"
+        case .openClaw:
+            "OPENCLAW"
         case .qoder:
             "QODER"
         case .factory:
@@ -488,6 +493,7 @@ public extension AgentSession {
     /// signals; non-hook sessions use process polling.
     var isVisibleInIsland: Bool {
         if isDemoSession { return true }
+        if tool == .openClaw { return true }
         if phase.requiresAttention { return true }
         if isHookManaged { return !isSessionEnded }
         if isProcessAlive { return true }

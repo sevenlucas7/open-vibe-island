@@ -1344,6 +1344,8 @@ private struct IslandSessionRow: View {
             return "terminal.fill"
         case .claudeCode:
             return "sparkles"
+        case .openClaw:
+            return "antenna.radiowaves.left.and.right"
         case .cursor:
             return "cursorarrow.motionlines"
         }
