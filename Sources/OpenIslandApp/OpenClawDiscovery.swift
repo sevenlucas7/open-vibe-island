@@ -843,23 +843,24 @@ struct OpenClawDiscovery {
         }
 
         let task = Process()
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
+        let combinedPipe = Pipe()
 
         task.executableURL = executableURL
         task.arguments = arguments
-        task.standardOutput = outputPipe
-        task.standardError = errorPipe
+        task.standardOutput = combinedPipe
+        task.standardError = combinedPipe
         task.environment = mergedEnvironment()
 
         do {
             try task.run()
+            let combinedOutput = String(
+                data: combinedPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
             task.waitUntilExit()
-            let stdout = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             return CommandOutput(
-                stdout: stdout,
-                stderr: stderr,
+                stdout: combinedOutput,
+                stderr: combinedOutput,
                 exitCode: task.terminationStatus,
                 executableFound: true
             )
