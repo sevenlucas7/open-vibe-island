@@ -135,6 +135,8 @@ struct IslandPanelView: View {
 
     private var closedSpotlightSession: AgentSession? {
         model.surfacedSessions.first(where: { $0.phase.requiresAttention })
+            ?? model.surfacedOpenClawSessions.first(where: { $0.phase == .running })
+            ?? model.surfacedOpenClawSessions.first
             ?? model.surfacedSessions.first(where: { $0.phase == .running })
             ?? model.surfacedSessions.first
     }
@@ -424,6 +426,11 @@ struct IslandPanelView: View {
 
     private var openedContent: some View {
         VStack(spacing: 0) {
+            if model.shouldShowOpenClawStatusStrip {
+                openClawStatusStrip
+                    .padding(.bottom, 10)
+            }
+
             if model.shouldShowSessionBootstrapPlaceholder {
                 sessionBootstrapPlaceholder
             } else if model.islandListSessions.isEmpty {
@@ -435,6 +442,40 @@ struct IslandPanelView: View {
         .padding(.horizontal, 18)
         .padding(.top, 8)
         .padding(.bottom, 0)
+    }
+
+    private var openClawStatusStrip: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("OpenClaw Xteam")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(model.hasDetectedOpenClaw ? Color.cyan.opacity(0.92) : Color.orange.opacity(0.92))
+
+            Text(model.openClawStatusTitle)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white.opacity(0.92))
+
+            Spacer(minLength: 8)
+
+            Text(model.openClawStatusDetail)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.white.opacity(0.55))
+                .lineLimit(1)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder((model.hasDetectedOpenClaw ? Color.cyan : Color.orange).opacity(0.2), lineWidth: 1)
+        )
     }
 
     private var sessionBootstrapPlaceholder: some View {
@@ -984,6 +1025,7 @@ private struct IslandSessionRow: View {
     private struct BadgeModel: Identifiable {
         enum Tone {
             case owner
+            case source
             case blocked
             case priority(SessionPriority)
             case project
@@ -1001,6 +1043,7 @@ private struct IslandSessionRow: View {
         static let ownerFanshu = Color(red: 0.96, green: 0.45, blue: 0.71)
         static let ownerPipi = Color(red: 0.38, green: 0.65, blue: 0.98)
         static let ownerMomo = Color(red: 0.65, green: 0.55, blue: 0.98)
+        static let sourceOpenClaw = Color(red: 0.37, green: 0.86, blue: 0.94)
         static let warning = Color(red: 0.96, green: 0.62, blue: 0.04)
         static let warningSoft = Color(red: 0.96, green: 0.70, blue: 0.24)
         static let danger = Color(red: 0.94, green: 0.27, blue: 0.27)
@@ -1212,6 +1255,17 @@ private struct IslandSessionRow: View {
                     title: owner,
                     icon: "person.crop.circle.fill",
                     tone: .owner
+                )
+            )
+        }
+
+        if session.tool == .openClaw {
+            badges.append(
+                BadgeModel(
+                    id: "source-openclaw",
+                    title: "OpenClaw Xteam",
+                    icon: "antenna.radiowaves.left.and.right",
+                    tone: .source
                 )
             )
         }
@@ -1643,6 +1697,12 @@ private struct IslandSessionRow: View {
                 background: RowPalette.surfaceElevated.opacity(dimmedOpacity),
                 border: ownerColor.opacity(0.28 * dimmedOpacity),
                 foreground: ownerColor.opacity(dimmedOpacity)
+            )
+        case .source:
+            return (
+                background: Color(red: 0.08, green: 0.12, blue: 0.16).opacity(dimmedOpacity),
+                border: RowPalette.sourceOpenClaw.opacity(0.22 * dimmedOpacity),
+                foreground: RowPalette.sourceOpenClaw.opacity(dimmedOpacity)
             )
         case .blocked:
             return (

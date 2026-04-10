@@ -18,6 +18,9 @@ final class SessionDiscoveryCoordinator {
         var discoveredClaudeSessions: [AgentSession]
         var discoveredOpenClawSessions: [AgentSession]
         var openClawStatusMessage: String?
+        var openClawAvailability: OpenClawDiscovery.Availability
+        var openClawTeamStoreCount: Int
+        var openClawRecentOwnerCount: Int
         var hooksBinaryURL: URL?
     }
 
@@ -101,6 +104,9 @@ final class SessionDiscoveryCoordinator {
             discoveredClaudeSessions: discoveredClaude,
             discoveredOpenClawSessions: discoveredOpenClaw.sessions,
             openClawStatusMessage: discoveredOpenClaw.statusMessage,
+            openClawAvailability: discoveredOpenClaw.availability,
+            openClawTeamStoreCount: discoveredOpenClaw.teamStoreCount,
+            openClawRecentOwnerCount: discoveredOpenClaw.recentOwnerCount,
             hooksBinaryURL: HooksBinaryLocator.locate(
                 executableDirectory: Bundle.main.executableURL?.deletingLastPathComponent()
             )

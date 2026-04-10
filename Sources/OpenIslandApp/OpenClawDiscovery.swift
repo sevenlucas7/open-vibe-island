@@ -2,9 +2,18 @@ import Foundation
 import OpenIslandCore
 
 struct OpenClawDiscovery {
+    enum Availability: Sendable {
+        case detected
+        case unavailable
+        case unreadable
+    }
+
     struct Result: Sendable {
         var sessions: [AgentSession]
         var statusMessage: String?
+        var availability: Availability
+        var teamStoreCount: Int
+        var recentOwnerCount: Int
     }
 
     struct CommandOutput: Sendable {
@@ -92,6 +101,9 @@ struct OpenClawDiscovery {
             return Result(
                 sessions: [],
                 statusMessage: "OpenClaw CLI not found. Xteam session visibility is unavailable."
+                ,availability: .unavailable,
+                teamStoreCount: 0,
+                recentOwnerCount: 0
             )
         }
 
@@ -100,6 +112,9 @@ struct OpenClawDiscovery {
             return Result(
                 sessions: [],
                 statusMessage: "OpenClaw CLI responded, but session JSON could not be parsed."
+                ,availability: .unreadable,
+                teamStoreCount: 0,
+                recentOwnerCount: 0
             )
         }
 
@@ -117,9 +132,10 @@ struct OpenClawDiscovery {
             stores: stores,
             now: .now
         )
+        let recentOwnerCount = discoveredSessions.filter(Self.isRecentOpenClawRow).count
 
         let statusMessage: String
-        if discoveredSessions.contains(where: { $0.phase != .completed || $0.summary != "No recent OpenClaw session." }) {
+        if recentOwnerCount > 0 {
             statusMessage = "Loaded \(discoveredSessions.count) Xteam OpenClaw visibility row(s) from local CLI."
         } else {
             statusMessage = "OpenClaw CLI is available, but no recent Xteam sessions were found."
@@ -127,7 +143,10 @@ struct OpenClawDiscovery {
 
         return Result(
             sessions: discoveredSessions,
-            statusMessage: statusMessage
+            statusMessage: statusMessage,
+            availability: .detected,
+            teamStoreCount: stores.count,
+            recentOwnerCount: recentOwnerCount
         )
     }
 
@@ -812,6 +831,10 @@ struct OpenClawDiscovery {
             .joined(separator: " ")
 
         return collapsed.isEmpty ? nil : collapsed
+    }
+
+    private static func isRecentOpenClawRow(_ session: AgentSession) -> Bool {
+        session.phase != .completed || session.summary != "No recent OpenClaw session."
     }
 
     private static func defaultCommandRunner(arguments: [String]) -> CommandOutput {

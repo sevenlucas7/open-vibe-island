@@ -196,6 +196,15 @@ struct GeneralSettingsPane: View {
                 ))
             }
 
+            Section("OpenClaw") {
+                LabeledContent("Status", value: model.openClawStatusTitle)
+                LabeledContent("Visibility", value: model.openClawStatusDetail)
+
+                if model.hasDetectedOpenClaw {
+                    LabeledContent("Surfaced rows", value: "\(model.surfacedOpenClawSessions.count)")
+                }
+            }
+
         }
         .formStyle(.grouped)
         .navigationTitle(lang.t("settings.tab.general"))

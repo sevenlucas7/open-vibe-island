@@ -211,6 +211,10 @@ final class AppModel {
     @ObservationIgnored
     private var hasFinishedInit = false
 
+    var openClawAvailability: OpenClawDiscovery.Availability?
+    var openClawTeamStoreCount: Int = 0
+    var openClawRecentOwnerCount: Int = 0
+
     var ignoresPointerExitDuringHarness = false
     var disablesOverlayEventMonitoringDuringHarness = false
 
@@ -369,6 +373,54 @@ final class AppModel {
         }
 
         return state.session(id: sessionID)
+    }
+
+    var openClawSessions: [AgentSession] {
+        state.sessions.filter { $0.tool == .openClaw }
+    }
+
+    var surfacedOpenClawSessions: [AgentSession] {
+        surfacedSessions.filter { $0.tool == .openClaw }
+    }
+
+    var hasDetectedOpenClaw: Bool {
+        openClawAvailability == .detected
+    }
+
+    var openClawStatusTitle: String {
+        switch openClawAvailability {
+        case .detected:
+            return "OpenClaw detected"
+        case .unavailable:
+            return "OpenClaw unavailable"
+        case .unreadable:
+            return "OpenClaw unreadable"
+        case nil:
+            return "OpenClaw checking"
+        }
+    }
+
+    var openClawStatusDetail: String {
+        switch openClawAvailability {
+        case .detected:
+            if openClawTeamStoreCount > 0 && openClawRecentOwnerCount > 0 {
+                return "\(openClawTeamStoreCount) Xteam stores found · \(openClawRecentOwnerCount) recent team rows"
+            }
+            if openClawTeamStoreCount > 0 {
+                return "\(openClawTeamStoreCount) Xteam stores found · No recent OpenClaw sessions"
+            }
+            return "OpenClaw detected, but no Xteam stores were found"
+        case .unavailable:
+            return "OpenClaw CLI not detected on this Mac"
+        case .unreadable:
+            return "OpenClaw responded, but session JSON could not be read"
+        case nil:
+            return "Checking local OpenClaw CLI"
+        }
+    }
+
+    var shouldShowOpenClawStatusStrip: Bool {
+        openClawAvailability != nil
     }
 
     var hasAnySession: Bool {
@@ -900,7 +952,7 @@ final class AppModel {
         guard let selectedSessionID,
               surfacedIDs.contains(selectedSessionID),
               state.session(id: selectedSessionID) != nil else {
-            self.selectedSessionID = surfacedSessions.first?.id ?? state.sessions.first?.id
+            self.selectedSessionID = preferredVisibleSession?.id ?? surfacedSessions.first?.id ?? state.sessions.first?.id
             return
         }
     }
@@ -908,6 +960,9 @@ final class AppModel {
     /// Applies startup discovery results on the main thread after background I/O completes.
     private func applyStartupDiscoveryPayload(_ payload: SessionDiscoveryCoordinator.StartupDiscoveryPayload) {
         discovery.applyStartupDiscoveryPayload(payload)
+        openClawAvailability = payload.openClawAvailability
+        openClawTeamStoreCount = payload.openClawTeamStoreCount
+        openClawRecentOwnerCount = payload.openClawRecentOwnerCount
 
         // Apply hooks binary URL and update the installed copy if the app ships a newer version.
         hooks.hooksBinaryURL = payload.hooksBinaryURL
@@ -939,6 +994,12 @@ final class AppModel {
         // Reconcile attachments and start monitoring (requires sessions to be loaded).
         monitoring.reconcileSessionAttachments()
         monitoring.startMonitoringIfNeeded()
+    }
+
+    private var preferredVisibleSession: AgentSession? {
+        surfacedOpenClawSessions.first(where: { $0.phase.requiresAttention })
+            ?? surfacedOpenClawSessions.first(where: { $0.phase == .running })
+            ?? surfacedOpenClawSessions.first
     }
 
 
@@ -1088,6 +1149,10 @@ final class AppModel {
 
         if session.jumpTarget != nil {
             score += 1_500
+        }
+
+        if session.tool == .openClaw {
+            score += 11_000
         }
 
         switch session.phase {
