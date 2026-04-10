@@ -878,6 +878,7 @@ struct OpenClawDiscovery {
         let currentPath = environment["PATH"] ?? ""
         let extraPaths = [
             "\(NSHomeDirectory())/.local/node22/bin",
+            "\(NSHomeDirectory())/.local/node-v22.22.1-darwin-arm64/bin",
             "\(NSHomeDirectory())/.nvm/versions/node/v22.22.1/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",
@@ -898,6 +899,7 @@ struct OpenClawDiscovery {
     private static func resolveExecutableURL() -> URL? {
         let candidates = [
             "\(NSHomeDirectory())/.local/node22/bin/openclaw",
+            "\(NSHomeDirectory())/.local/node-v22.22.1-darwin-arm64/bin/openclaw",
             "\(NSHomeDirectory())/.nvm/versions/node/v22.22.1/bin/openclaw",
             "/opt/homebrew/bin/openclaw",
             "/usr/local/bin/openclaw",
