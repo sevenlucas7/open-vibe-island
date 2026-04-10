@@ -164,7 +164,7 @@ struct IslandPanelView: View {
 
     private var countBadgeWidth: CGFloat {
         if hasClosedPresence {
-            return 78
+            return closedRightAnchorWidth
         }
 
         let digits = max(1, "\(model.liveSessionCount)".count)
@@ -178,9 +178,32 @@ struct IslandPanelView: View {
     private var expansionWidth: CGFloat {
         guard hasClosedPresence else { return 0 }
         let leftWidth = closedSpotlightWidth
-        let rightWidth = max(sideWidth, countBadgeWidth)
-        let hasPending = closedSpotlightSession?.phase.requiresAttention == true
-        return leftWidth + rightWidth + 16 + (hasPending ? 6 : 0)
+        let rightWidth = closedRightAnchorWidth
+        return leftWidth + rightWidth + 18
+    }
+
+    private var closedHeaderWidth: CGFloat {
+        closedNotchWidth + expansionWidth + (isPopping ? 18 : 0)
+    }
+
+    private var closedCenterDeadZoneWidth: CGFloat {
+        max(84, closedNotchWidth - 140)
+    }
+
+    private var closedRightAnchorWidth: CGFloat {
+        showsClosedOverflowToken ? 68 : 40
+    }
+
+    private var showsClosedOverflowToken: Bool {
+        guard model.spotlightOverflowCount > 0 else {
+            return false
+        }
+
+        if closedSpotlightSession?.phase.requiresAttention == true {
+            return false
+        }
+
+        return closedNotchWidth >= 240
     }
 
     /// Composite key combining `hasClosedPresence` and `expansionWidth` so a
@@ -333,27 +356,19 @@ struct IslandPanelView: View {
                     .frame(width: closedSpotlightWidth, alignment: .leading)
                 }
 
-                if !hasClosedPresence {
-                    Rectangle()
-                        .fill(Color.clear)
-                        .frame(width: closedNotchWidth - 20)
-                } else {
-                    Rectangle()
-                        .fill(Color.black)
-                        .frame(width: max(0, closedNotchWidth - NotchShape.closedTopRadius - 68 + (isPopping ? 18 : 0)))
-                }
+                Spacer(minLength: hasClosedPresence ? closedCenterDeadZoneWidth : max(0, closedNotchWidth - 20))
 
                 if hasClosedPresence {
                     ClosedCountBadge(
                         statusToken: closedSpotlightSession?.spotlightCompactStatusToken ?? "IDLE",
-                        liveCount: max(1, model.activeAgentCount),
-                        overflowCount: model.spotlightOverflowCount,
+                        overflowCount: showsClosedOverflowToken ? model.spotlightOverflowCount : 0,
                         tint: closedSpotlightSession?.phase.requiresAttention == true ? .orange : scoutTint
                     )
                     .matchedGeometryEffect(id: "right-indicator", in: notchNamespace, isSource: true)
-                    .frame(width: max(sideWidth, countBadgeWidth))
+                    .frame(width: closedRightAnchorWidth, alignment: .trailing)
                 }
             }
+            .frame(width: closedHeaderWidth, height: closedNotchHeight, alignment: .center)
             .frame(height: closedNotchHeight)
         }
     }
@@ -2161,35 +2176,29 @@ private struct AttentionIndicator: View {
 
 private struct ClosedCountBadge: View {
     let statusToken: String
-    let liveCount: Int
     let overflowCount: Int
     let tint: Color
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             Text(statusToken)
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(tint)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
+                .frame(minWidth: 28)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
                 .background(Color(red: 0.14, green: 0.14, blue: 0.15), in: Capsule())
 
             if overflowCount > 0 {
                 Text("+\(overflowCount)")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.84))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
                     .background(Color.white.opacity(0.08), in: Capsule())
-            } else if liveCount > 1 {
-                Text("\(liveCount)")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.78))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.06), in: Capsule())
             }
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
