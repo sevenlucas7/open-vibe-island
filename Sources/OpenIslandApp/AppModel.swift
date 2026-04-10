@@ -1293,6 +1293,7 @@ final class AppModel {
 
     private func spotlightScore(for session: AgentSession) -> Int {
         var score = sessionSortScore(for: session, now: .now)
+        let owner = displayOwner(for: session)
 
         switch session.phase {
         case .waitingForApproval:
@@ -1323,6 +1324,27 @@ final class AppModel {
                 score += 8_000
             case .low:
                 break
+            }
+        }
+
+        if owner == Self.prioritizedOwnerDisplayName {
+            switch session.phase {
+            case .running:
+                score += 22_000
+            case .waitingForAnswer, .waitingForApproval:
+                score += 12_000
+            case .completed:
+                score += 2_000
+            }
+        }
+
+        if session.phase != .completed {
+            if session.spotlightPromptText?.isEmpty == false {
+                score += 9_000
+            }
+
+            if session.spotlightHeadlinePromptText?.isEmpty == false {
+                score += 4_000
             }
         }
 

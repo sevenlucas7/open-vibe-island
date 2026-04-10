@@ -163,12 +163,16 @@ struct IslandPanelView: View {
     }
 
     private var countBadgeWidth: CGFloat {
+        if hasClosedPresence {
+            return 78
+        }
+
         let digits = max(1, "\(model.liveSessionCount)".count)
         return CGFloat(26 + max(0, digits - 1) * 8)
     }
 
     private var closedSpotlightWidth: CGFloat {
-        hasClosedPresence ? 140 : sideWidth
+        hasClosedPresence ? 104 : sideWidth
     }
 
     private var expansionWidth: CGFloat {
@@ -323,9 +327,7 @@ struct IslandPanelView: View {
                 if hasClosedPresence {
                     ClosedSpotlightAgentView(
                         session: closedSpotlightSession,
-                        identity: closedSpotlightSession.flatMap { model.identity(for: $0) },
-                        overflowCount: model.spotlightOverflowCount,
-                        liveCount: model.activeAgentCount
+                        identity: closedSpotlightSession.flatMap { model.identity(for: $0) }
                     )
                     .matchedGeometryEffect(id: "island-icon", in: notchNamespace, isSource: true)
                     .frame(width: closedSpotlightWidth, alignment: .leading)
@@ -343,6 +345,7 @@ struct IslandPanelView: View {
 
                 if hasClosedPresence {
                     ClosedCountBadge(
+                        statusToken: closedSpotlightSession?.spotlightCompactStatusToken ?? "IDLE",
                         liveCount: max(1, model.activeAgentCount),
                         overflowCount: model.spotlightOverflowCount,
                         tint: closedSpotlightSession?.phase.requiresAttention == true ? .orange : scoutTint
@@ -2157,25 +2160,42 @@ private struct AttentionIndicator: View {
 // MARK: - Closed count badge (right side of closed notch)
 
 private struct ClosedCountBadge: View {
+    let statusToken: String
     let liveCount: Int
     let overflowCount: Int
     let tint: Color
 
     var body: some View {
-        Text(overflowCount > 0 ? "+\(overflowCount)" : "\(liveCount)")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(Color(red: 0.14, green: 0.14, blue: 0.15), in: Capsule())
+        HStack(spacing: 4) {
+            Text(statusToken)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(tint)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color(red: 0.14, green: 0.14, blue: 0.15), in: Capsule())
+
+            if overflowCount > 0 {
+                Text("+\(overflowCount)")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.84))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.08), in: Capsule())
+            } else if liveCount > 1 {
+                Text("\(liveCount)")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.06), in: Capsule())
+            }
+        }
     }
 }
 
 private struct ClosedSpotlightAgentView: View {
     let session: AgentSession?
     let identity: AppModel.AgentIdentity?
-    let overflowCount: Int
-    let liveCount: Int
 
     private var avatarPreset: OpenIslandBrandMark.Preset {
         guard let key = identity?.avatarPresetKey,
@@ -2194,45 +2214,20 @@ private struct ClosedSpotlightAgentView: View {
         session?.spotlightShortLabel ?? identity?.shortLabel ?? "AGT"
     }
 
-    private var statusLabel: String {
-        session?.spotlightStatusLabel ?? "Idle"
-    }
-
-    private var handoffLabel: String? {
-        session?.spotlightHandoffLabel
-    }
-
     var body: some View {
         HStack(spacing: 8) {
             OpenIslandIcon(size: 16, isAnimating: session?.phase == .running, tint: tint, preset: avatarPreset)
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    Text(shortLabel)
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.94))
+            HStack(spacing: 4) {
+                Text(shortLabel)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.94))
 
-                    if session?.phase.requiresAttention == true {
-                        AttentionIndicator(size: 10, color: .orange)
-                    }
+                if session?.phase.requiresAttention == true {
+                    AttentionIndicator(size: 10, color: .orange)
                 }
-
-                Text(handoffLabel ?? statusLabel)
-                    .font(.system(size: 8.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.62))
-                    .lineLimit(1)
             }
-
-            Spacer(minLength: 0)
-
-            if liveCount > 1 || overflowCount > 0 {
-                Text(overflowCount > 0 ? "+\(overflowCount)" : "\(liveCount)")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(tint.opacity(0.95))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.06), in: Capsule())
-            }
+            .lineLimit(1)
         }
     }
 }

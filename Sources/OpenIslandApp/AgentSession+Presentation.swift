@@ -107,6 +107,23 @@ extension AgentSession {
         }
     }
 
+    var spotlightCompactStatusToken: String {
+        if isBlocked {
+            return "BLK"
+        }
+
+        switch phase {
+        case .running:
+            return "RUN"
+        case .waitingForApproval:
+            return "REV"
+        case .waitingForAnswer:
+            return "ASK"
+        case .completed:
+            return "DONE"
+        }
+    }
+
     var spotlightShortLabel: String {
         if let ownerShortLabel = ownerShortLabel?.trimmedForSurface,
            !ownerShortLabel.isEmpty {
