@@ -2156,6 +2156,7 @@ private struct OpenIslandIcon: View {
             style: .duotone,
             preset: preset
         )
+        .frame(width: size, height: size)
     }
 }
 
@@ -2203,6 +2204,9 @@ private struct ClosedCountBadge: View {
 }
 
 private struct ClosedSpotlightAgentView: View {
+    private static let leadingInset: CGFloat = 8
+    private static let iconSize: CGFloat = 14
+
     let session: AgentSession?
     let identity: AppModel.AgentIdentity?
 
@@ -2225,7 +2229,8 @@ private struct ClosedSpotlightAgentView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            OpenIslandIcon(size: 16, isAnimating: session?.phase == .running, tint: tint, preset: avatarPreset)
+            OpenIslandIcon(size: Self.iconSize, isAnimating: session?.phase == .running, tint: tint, preset: avatarPreset)
+                .frame(width: Self.iconSize, height: Self.iconSize)
 
             HStack(spacing: 4) {
                 Text(shortLabel)
@@ -2238,6 +2243,8 @@ private struct ClosedSpotlightAgentView: View {
             }
             .lineLimit(1)
         }
+        .padding(.leading, Self.leadingInset)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

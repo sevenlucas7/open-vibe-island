@@ -33,13 +33,13 @@ struct OpenIslandBrandMark: View {
 
     private static let orbPattern = [
         "...BB...",
-        "..BHHB..",
+        "..BBBB..",
+        ".BHEEHB.",
         ".BHHHHB.",
-        ".BHHEHB.",
-        ".BHHHHB.",
-        "..BHHB..",
-        "...BB...",
-        "........",
+        ".B.BB.B.",
+        "..BBBB..",
+        "..B..B..",
+        "...B....",
     ]
 
     private static let flarePattern = [
@@ -77,7 +77,8 @@ struct OpenIslandBrandMark: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let cell = min(proxy.size.width / 8, proxy.size.height / 8)
+            let drawingSize = min(proxy.size.width, proxy.size.height) * 0.84
+            let cell = drawingSize / 8
             let markWidth = cell * 8
             let markHeight = cell * 8
             let originX = (proxy.size.width - markWidth) / 2
