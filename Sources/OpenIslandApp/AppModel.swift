@@ -7,6 +7,14 @@ import SwiftUI
 @MainActor
 @Observable
 final class AppModel {
+    struct AgentIdentity: Equatable {
+        var displayName: String
+        var shortLabel: String
+        var ownerColor: Color
+        var avatarPresetKey: String
+        var animationProfileKey: String
+    }
+
     private static let soundMutedDefaultsKey = "overlay.sound.muted"
     private static let showDockIconDefaultsKey = "app.showDockIcon"
     private static let syntheticClaudeSessionPrefix = "claude-process:"
@@ -34,6 +42,13 @@ final class AppModel {
         .cursor: "Pipi",
         .codebuddy: "Momo",
         .geminiCLI: "Momo",
+    ]
+    private static let canonicalAgentIdentities: [String: AgentIdentity] = [
+        "seven": AgentIdentity(displayName: "Seven", shortLabel: "SEV", ownerColor: Color(red: 0.37, green: 0.92, blue: 0.83), avatarPresetKey: "scout", animationProfileKey: "pulse"),
+        "luvian": AgentIdentity(displayName: "Luvian", shortLabel: "LUV", ownerColor: Color(red: 0.31, green: 0.79, blue: 0.71), avatarPresetKey: "orb", animationProfileKey: "drift"),
+        "fanshu": AgentIdentity(displayName: "Fanshu", shortLabel: "FAN", ownerColor: Color(red: 0.96, green: 0.45, blue: 0.71), avatarPresetKey: "flare", animationProfileKey: "flicker"),
+        "pipi": AgentIdentity(displayName: "Pipi", shortLabel: "PIP", ownerColor: Color(red: 0.38, green: 0.65, blue: 0.98), avatarPresetKey: "array", animationProfileKey: "scan"),
+        "momo": AgentIdentity(displayName: "Momo", shortLabel: "MOM", ownerColor: Color(red: 0.65, green: 0.55, blue: 0.98), avatarPresetKey: "halo", animationProfileKey: "glow"),
     ]
     static let hoverOpenDelay: TimeInterval = 0.15
 
@@ -381,6 +396,47 @@ final class AppModel {
 
     var surfacedOpenClawSessions: [AgentSession] {
         surfacedSessions.filter { $0.tool == .openClaw }
+    }
+
+    var spotlightSession: AgentSession? {
+        surfacedSessions.max(by: { spotlightScore(for: $0) < spotlightScore(for: $1) })
+    }
+
+    var spotlightIdentity: AgentIdentity? {
+        spotlightSession.flatMap(identity(for:))
+    }
+
+    var spotlightOverflowCount: Int {
+        max(0, surfacedSessions.filter { $0.id != spotlightSession?.id && $0.phase != .completed }.count)
+    }
+
+    var attentionSessions: [AgentSession] {
+        surfacedSessions.filter { $0.phase.requiresAttention }
+    }
+
+    var activeSessions: [AgentSession] {
+        surfacedSessions.filter { !$0.phase.requiresAttention && $0.phase == .running }
+    }
+
+    var recentCompletedSessions: [AgentSession] {
+        let surfacedIDs = Set(surfacedSessions.map(\.id))
+        return state.sessions.filter { !surfacedIDs.contains($0.id) || $0.phase == .completed }
+    }
+
+    var approvalPinnedSession: AgentSession? {
+        attentionSessions.first(where: { $0.phase == .waitingForApproval })
+    }
+
+    var activeAgentCount: Int {
+        surfacedSessions.filter { $0.phase == .running || $0.phase.requiresAttention }.count
+    }
+
+    var approvalCount: Int {
+        state.sessions.filter { $0.phase == .waitingForApproval }.count
+    }
+
+    var doneCount: Int {
+        state.sessions.filter { $0.phase == .completed }.count
     }
 
     var hasDetectedOpenClaw: Bool {
@@ -1090,6 +1146,28 @@ final class AppModel {
         return nil
     }
 
+    func displayOwnerShortLabel(for session: AgentSession) -> String? {
+        if let explicitShortLabel = normalizedInlineText(session.ownerShortLabel) {
+            return explicitShortLabel.uppercased()
+        }
+
+        return identity(for: session)?.shortLabel
+    }
+
+    func identity(for session: AgentSession) -> AgentIdentity? {
+        if let explicitOwner = normalizedOwnerDisplayName(from: session.ownerDisplayName),
+           let identity = Self.canonicalAgentIdentities[explicitOwner.lowercased()] {
+            return identity
+        }
+
+        if let defaultOwner = Self.defaultOwnerDisplayNamesByTool[session.tool],
+           let identity = Self.canonicalAgentIdentities[defaultOwner.lowercased()] {
+            return identity
+        }
+
+        return nil
+    }
+
     func displayBlockedState(for session: AgentSession) -> Bool {
         session.isBlocked || session.phase.requiresAttention || displayBlockerSummary(for: session) != nil
     }
@@ -1208,6 +1286,44 @@ final class AppModel {
             score += 40
         default:
             break
+        }
+
+        return score
+    }
+
+    private func spotlightScore(for session: AgentSession) -> Int {
+        var score = sessionSortScore(for: session, now: .now)
+
+        switch session.phase {
+        case .waitingForApproval:
+            score += 120_000
+        case .waitingForAnswer:
+            score += 85_000
+        case .running:
+            score += 40_000
+        case .completed:
+            score += 8_000
+        }
+
+        if displayBlockedState(for: session) {
+            score += 95_000
+        }
+
+        if session.spotlightHandoffLabel != nil {
+            score += 55_000
+        }
+
+        if let priority = displayPriority(for: session) {
+            switch priority {
+            case .critical:
+                score += 50_000
+            case .high:
+                score += 28_000
+            case .normal:
+                score += 8_000
+            case .low:
+                break
+            }
         }
 
         return score

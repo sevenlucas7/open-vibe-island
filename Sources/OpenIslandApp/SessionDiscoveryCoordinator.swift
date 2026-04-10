@@ -229,11 +229,15 @@ final class SessionDiscoveryCoordinator {
         merged.openCodeMetadata = mergeOpenCodeMetadata(existing.openCodeMetadata, discovered.openCodeMetadata)
         merged.cursorMetadata = mergeCursorMetadata(existing.cursorMetadata, discovered.cursorMetadata)
         merged.ownerDisplayName = discovered.ownerDisplayName ?? existing.ownerDisplayName
+        merged.ownerShortLabel = discovered.ownerShortLabel ?? existing.ownerShortLabel
         merged.teamRole = discovered.teamRole ?? existing.teamRole
         merged.projectTag = discovered.projectTag ?? existing.projectTag
         merged.priority = discovered.priority ?? existing.priority
         merged.isBlocked = discovered.isBlocked || existing.isBlocked
         merged.blockerSummary = discovered.blockerSummary ?? existing.blockerSummary
+        merged.avatarPresetKey = discovered.avatarPresetKey ?? existing.avatarPresetKey
+        merged.animationProfileKey = discovered.animationProfileKey ?? existing.animationProfileKey
+        merged.handoffSummary = discovered.handoffSummary ?? existing.handoffSummary
 
         return merged
     }

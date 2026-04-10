@@ -323,11 +323,15 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
     public var openCodeMetadata: OpenCodeSessionMetadata?
     public var cursorMetadata: CursorSessionMetadata?
     public var ownerDisplayName: String?
+    public var ownerShortLabel: String?
     public var teamRole: String?
     public var projectTag: String?
     public var priority: SessionPriority?
     public var isBlocked: Bool
     public var blockerSummary: String?
+    public var avatarPresetKey: String?
+    public var animationProfileKey: String?
+    public var handoffSummary: String?
 
     /// Whether this session originates from a remote (SSH) connection.
     public var isRemote: Bool = false
@@ -367,11 +371,15 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         openCodeMetadata: OpenCodeSessionMetadata? = nil,
         cursorMetadata: CursorSessionMetadata? = nil,
         ownerDisplayName: String? = nil,
+        ownerShortLabel: String? = nil,
         teamRole: String? = nil,
         projectTag: String? = nil,
         priority: SessionPriority? = nil,
         isBlocked: Bool = false,
-        blockerSummary: String? = nil
+        blockerSummary: String? = nil,
+        avatarPresetKey: String? = nil,
+        animationProfileKey: String? = nil,
+        handoffSummary: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -389,11 +397,15 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         self.openCodeMetadata = openCodeMetadata
         self.cursorMetadata = cursorMetadata
         self.ownerDisplayName = ownerDisplayName
+        self.ownerShortLabel = ownerShortLabel
         self.teamRole = teamRole
         self.projectTag = projectTag
         self.priority = priority
         self.isBlocked = isBlocked
         self.blockerSummary = blockerSummary
+        self.avatarPresetKey = avatarPresetKey
+        self.animationProfileKey = animationProfileKey
+        self.handoffSummary = handoffSummary
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -413,11 +425,15 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         case openCodeMetadata
         case cursorMetadata
         case ownerDisplayName
+        case ownerShortLabel
         case teamRole
         case projectTag
         case priority
         case isBlocked
         case blockerSummary
+        case avatarPresetKey
+        case animationProfileKey
+        case handoffSummary
     }
 
     public init(from decoder: any Decoder) throws {
@@ -438,11 +454,15 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         openCodeMetadata = try container.decodeIfPresent(OpenCodeSessionMetadata.self, forKey: .openCodeMetadata)
         cursorMetadata = try container.decodeIfPresent(CursorSessionMetadata.self, forKey: .cursorMetadata)
         ownerDisplayName = try container.decodeIfPresent(String.self, forKey: .ownerDisplayName)
+        ownerShortLabel = try container.decodeIfPresent(String.self, forKey: .ownerShortLabel)
         teamRole = try container.decodeIfPresent(String.self, forKey: .teamRole)
         projectTag = try container.decodeIfPresent(String.self, forKey: .projectTag)
         priority = try container.decodeIfPresent(SessionPriority.self, forKey: .priority)
         isBlocked = try container.decodeIfPresent(Bool.self, forKey: .isBlocked) ?? false
         blockerSummary = try container.decodeIfPresent(String.self, forKey: .blockerSummary)
+        avatarPresetKey = try container.decodeIfPresent(String.self, forKey: .avatarPresetKey)
+        animationProfileKey = try container.decodeIfPresent(String.self, forKey: .animationProfileKey)
+        handoffSummary = try container.decodeIfPresent(String.self, forKey: .handoffSummary)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -463,11 +483,15 @@ public struct AgentSession: Equatable, Identifiable, Codable, Sendable {
         try container.encodeIfPresent(openCodeMetadata, forKey: .openCodeMetadata)
         try container.encodeIfPresent(cursorMetadata, forKey: .cursorMetadata)
         try container.encodeIfPresent(ownerDisplayName, forKey: .ownerDisplayName)
+        try container.encodeIfPresent(ownerShortLabel, forKey: .ownerShortLabel)
         try container.encodeIfPresent(teamRole, forKey: .teamRole)
         try container.encodeIfPresent(projectTag, forKey: .projectTag)
         try container.encodeIfPresent(priority, forKey: .priority)
         try container.encode(isBlocked, forKey: .isBlocked)
         try container.encodeIfPresent(blockerSummary, forKey: .blockerSummary)
+        try container.encodeIfPresent(avatarPresetKey, forKey: .avatarPresetKey)
+        try container.encodeIfPresent(animationProfileKey, forKey: .animationProfileKey)
+        try container.encodeIfPresent(handoffSummary, forKey: .handoffSummary)
     }
 }
 

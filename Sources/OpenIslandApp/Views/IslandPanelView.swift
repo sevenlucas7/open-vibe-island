@@ -111,6 +111,7 @@ struct IslandPanelView: View {
 
     @Namespace private var notchNamespace
     @State private var isHovering = false
+    @State private var keyboardSelectedSessionID: String?
 
     private var isOpened: Bool {
         model.notchStatus == .opened
@@ -134,11 +135,7 @@ struct IslandPanelView: View {
     }
 
     private var closedSpotlightSession: AgentSession? {
-        model.surfacedSessions.first(where: { $0.phase.requiresAttention })
-            ?? model.surfacedOpenClawSessions.first(where: { $0.phase == .running })
-            ?? model.surfacedOpenClawSessions.first
-            ?? model.surfacedSessions.first(where: { $0.phase == .running })
-            ?? model.surfacedSessions.first
+        model.spotlightSession
     }
 
     private var hasClosedPresence: Bool {
@@ -170,9 +167,13 @@ struct IslandPanelView: View {
         return CGFloat(26 + max(0, digits - 1) * 8)
     }
 
+    private var closedSpotlightWidth: CGFloat {
+        hasClosedPresence ? 140 : sideWidth
+    }
+
     private var expansionWidth: CGFloat {
         guard hasClosedPresence else { return 0 }
-        let leftWidth = sideWidth + 8 + (closedSpotlightSession?.phase.requiresAttention == true ? 18 : 0)
+        let leftWidth = closedSpotlightWidth
         let rightWidth = max(sideWidth, countBadgeWidth)
         let hasPending = closedSpotlightSession?.phase.requiresAttention == true
         return leftWidth + rightWidth + 16 + (hasPending ? 6 : 0)
@@ -320,18 +321,14 @@ struct IslandPanelView: View {
         } else {
             HStack(spacing: 0) {
                 if hasClosedPresence {
-                    HStack(spacing: 4) {
-                        OpenIslandIcon(size: 14, isAnimating: hasClosedActivity, tint: scoutTint)
-                            .matchedGeometryEffect(id: "island-icon", in: notchNamespace, isSource: true)
-
-                        if closedSpotlightSession?.phase.requiresAttention == true {
-                            AttentionIndicator(
-                                size: 14,
-                                color: phaseColor(closedSpotlightSession?.phase ?? .running)
-                            )
-                        }
-                    }
-                    .frame(width: sideWidth + 8 + (closedSpotlightSession?.phase.requiresAttention == true ? 18 : 0))
+                    ClosedSpotlightAgentView(
+                        session: closedSpotlightSession,
+                        identity: closedSpotlightSession.flatMap { model.identity(for: $0) },
+                        overflowCount: model.spotlightOverflowCount,
+                        liveCount: model.activeAgentCount
+                    )
+                    .matchedGeometryEffect(id: "island-icon", in: notchNamespace, isSource: true)
+                    .frame(width: closedSpotlightWidth, alignment: .leading)
                 }
 
                 if !hasClosedPresence {
@@ -341,12 +338,13 @@ struct IslandPanelView: View {
                 } else {
                     Rectangle()
                         .fill(Color.black)
-                        .frame(width: closedNotchWidth - NotchShape.closedTopRadius + (isPopping ? 18 : 0))
+                        .frame(width: max(0, closedNotchWidth - NotchShape.closedTopRadius - 68 + (isPopping ? 18 : 0)))
                 }
 
                 if hasClosedPresence {
                     ClosedCountBadge(
-                        liveCount: model.liveSessionCount,
+                        liveCount: max(1, model.activeAgentCount),
+                        overflowCount: model.spotlightOverflowCount,
                         tint: closedSpotlightSession?.phase.requiresAttention == true ? .orange : scoutTint
                     )
                     .matchedGeometryEffect(id: "right-indicator", in: notchNamespace, isSource: true)
@@ -431,6 +429,11 @@ struct IslandPanelView: View {
                     .padding(.bottom, 10)
             }
 
+            if model.hasAnySession {
+                islandSummaryStrip
+                    .padding(.bottom, 10)
+            }
+
             if model.shouldShowSessionBootstrapPlaceholder {
                 sessionBootstrapPlaceholder
             } else if model.islandListSessions.isEmpty {
@@ -476,6 +479,15 @@ struct IslandPanelView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder((model.hasDetectedOpenClaw ? Color.cyan : Color.orange).opacity(0.2), lineWidth: 1)
         )
+    }
+
+    private var islandSummaryStrip: some View {
+        HStack(spacing: 8) {
+            headerPill("Active \(model.activeAgentCount)", tint: .white.opacity(0.92))
+            headerPill("Approval \(model.approvalCount)", tint: model.approvalCount > 0 ? .orange.opacity(0.96) : .white.opacity(0.52))
+            headerPill("Done \(model.doneCount)", tint: .white.opacity(0.52))
+            Spacer(minLength: 0)
+        }
     }
 
     private var sessionBootstrapPlaceholder: some View {
@@ -543,11 +555,21 @@ struct IslandPanelView: View {
                         }
                     }
             } else {
-                // List mode: auto-height (fits content, scrolls only when exceeding max)
-                AutoHeightScrollView(maxHeight: Self.maxSessionListHeight) {
-                    sessionListContent(context: context)
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical) {
+                        sessionListContent(context: context)
+                            .padding(.vertical, 2)
+                    }
+                    .scrollIndicators(.visible)
+                    .frame(maxHeight: Self.maxSessionListHeight)
+                    .focusable()
+                    .onAppear {
+                        keyboardSelectedSessionID = keyboardSelectedSessionID ?? model.spotlightSession?.id
+                    }
+                    .onMoveCommand { direction in
+                        handleMoveCommand(direction, proxy: proxy)
+                    }
                 }
-                .padding(.vertical, 2)
             }
         }
     }
@@ -583,21 +605,98 @@ struct IslandPanelView: View {
                     .buttonStyle(.plain)
                 }
             } else {
-                ForEach(model.islandListSessions) { session in
-                    IslandSessionRow(
-                        model: model,
-                        session: session,
-                        referenceDate: context.date,
-                        isActionable: session.phase.requiresAttention || session.id == actionableSessionID,
-                        useDrawingGroup: model.notchStatus == .opened,
-                        isInteractive: model.notchStatus == .opened,
-                        lang: model.lang,
-                        onApprove: { model.approvePermission(for: session.id, action: $0) },
-                        onAnswer: { model.answerQuestion(for: session.id, answer: $0) },
-                        onJump: { model.jumpToSession(session) }
-                    )
+                if let approvalSession = model.approvalPinnedSession {
+                    sessionSectionHeader("Attention")
+                    sessionRowView(for: approvalSession, at: context.date)
+                        .id(approvalSession.id)
+                }
+
+                let remainingAttention = model.attentionSessions.filter { $0.id != model.approvalPinnedSession?.id }
+                if !remainingAttention.isEmpty {
+                    if model.approvalPinnedSession == nil {
+                        sessionSectionHeader("Attention")
+                    }
+                    ForEach(remainingAttention) { session in
+                        sessionRowView(for: session, at: context.date)
+                            .id(session.id)
+                    }
+                }
+
+                if !model.activeSessions.isEmpty {
+                    sessionSectionHeader("Active")
+                    ForEach(model.activeSessions) { session in
+                        sessionRowView(for: session, at: context.date)
+                            .id(session.id)
+                    }
+                }
+
+                if !model.recentCompletedSessions.isEmpty {
+                    sessionSectionHeader("Recent")
+                    ForEach(model.recentCompletedSessions.prefix(8)) { session in
+                        sessionRowView(for: session, at: context.date)
+                            .id(session.id)
+                    }
                 }
             }
+        }
+    }
+
+    private func sessionSectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.42))
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 4)
+        .padding(.bottom, 2)
+    }
+
+    private func sessionRowView(for session: AgentSession, at referenceDate: Date) -> some View {
+        IslandSessionRow(
+            model: model,
+            session: session,
+            referenceDate: referenceDate,
+            isActionable: session.phase.requiresAttention || session.id == actionableSessionID,
+            useDrawingGroup: model.notchStatus == .opened,
+            isInteractive: model.notchStatus == .opened,
+            lang: model.lang,
+            onApprove: { model.approvePermission(for: session.id, action: $0) },
+            onAnswer: { model.answerQuestion(for: session.id, answer: $0) },
+            onJump: { model.jumpToSession(session) }
+        )
+    }
+
+    private var navigableSessionIDs: [String] {
+        var ids: [String] = []
+        if let approvalID = model.approvalPinnedSession?.id {
+            ids.append(approvalID)
+        }
+        ids.append(contentsOf: model.attentionSessions.map(\.id).filter { $0 != model.approvalPinnedSession?.id })
+        ids.append(contentsOf: model.activeSessions.map(\.id))
+        ids.append(contentsOf: model.recentCompletedSessions.prefix(8).map(\.id))
+        return ids
+    }
+
+    private func handleMoveCommand(_ direction: MoveCommandDirection, proxy: ScrollViewProxy) {
+        guard !navigableSessionIDs.isEmpty else { return }
+        let currentIndex = keyboardSelectedSessionID.flatMap { navigableSessionIDs.firstIndex(of: $0) } ?? 0
+        let nextIndex: Int
+
+        switch direction {
+        case .down:
+            nextIndex = min(navigableSessionIDs.count - 1, currentIndex + 1)
+        case .up:
+            nextIndex = max(0, currentIndex - 1)
+        default:
+            return
+        }
+
+        let sessionID = navigableSessionIDs[nextIndex]
+        keyboardSelectedSessionID = sessionID
+        model.select(sessionID: sessionID)
+        withAnimation(.smooth) {
+            proxy.scrollTo(sessionID, anchor: .center)
         }
     }
 
@@ -1229,6 +1328,10 @@ private struct IslandSessionRow: View {
         model.displayOwner(for: session)
     }
 
+    private var displayIdentity: AppModel.AgentIdentity? {
+        model.identity(for: session)
+    }
+
     private var displayProjectTag: String? {
         model.displayProjectTag(for: session)
     }
@@ -1378,6 +1481,10 @@ private struct IslandSessionRow: View {
             return blockerSummary
         }
 
+        if let handoffSummary = session.spotlightHandoffLabel {
+            return handoffSummary
+        }
+
         return session.spotlightActivityLineText
             ?? expandedActivityLineText
             ?? session.spotlightPromptLineText
@@ -1479,9 +1586,9 @@ private struct IslandSessionRow: View {
             )
 
             HStack(spacing: 8) {
-                Button("No") { onApprove?(.deny) }
+                Button("Deny") { onApprove?(.deny) }
                     .buttonStyle(IslandWideButtonStyle(kind: .secondary))
-                Button("Yes") { onApprove?(.allowOnce) }
+                Button("Allow Once") { onApprove?(.allowOnce) }
                     .buttonStyle(IslandWideButtonStyle(kind: .warning))
                 if let toolName = session.permissionRequest?.toolName {
                     Button("Always Allow (\(toolName))") {
@@ -1494,6 +1601,12 @@ private struct IslandSessionRow: View {
                         onApprove?(.allowWithUpdates([update]))
                     }
                     .buttonStyle(IslandWideButtonStyle(kind: .danger))
+                }
+                if session.jumpTarget != nil {
+                    Button("Jump") {
+                        onJump()
+                    }
+                    .buttonStyle(IslandWideButtonStyle(kind: .secondary))
                 }
             }
         }
@@ -1692,7 +1805,7 @@ private struct IslandSessionRow: View {
 
         switch badge.tone {
         case .owner:
-            let ownerColor = ownerColor(for: badge.title)
+            let ownerColor = displayIdentity?.ownerColor ?? RowPalette.unknownOwner
             return (
                 background: RowPalette.surfaceElevated.opacity(dimmedOpacity),
                 border: ownerColor.opacity(0.28 * dimmedOpacity),
@@ -1740,26 +1853,9 @@ private struct IslandSessionRow: View {
         case .project:
             return (
                 background: Color(red: 0.09, green: 0.13, blue: 0.15).opacity(dimmedOpacity),
-                border: RowPalette.ownerLuvian.opacity(0.18 * dimmedOpacity),
-                foreground: RowPalette.ownerLuvian.opacity(0.88 * dimmedOpacity)
+                border: (displayIdentity?.ownerColor ?? RowPalette.agentAlive).opacity(0.18 * dimmedOpacity),
+                foreground: (displayIdentity?.ownerColor ?? RowPalette.agentAlive).opacity(0.88 * dimmedOpacity)
             )
-        }
-    }
-
-    private func ownerColor(for owner: String) -> Color {
-        switch owner {
-        case "Seven":
-            return RowPalette.agentAlive
-        case "Luvian":
-            return RowPalette.ownerLuvian
-        case "Fanshu":
-            return RowPalette.ownerFanshu
-        case "Pipi":
-            return RowPalette.ownerPipi
-        case "Momo":
-            return RowPalette.ownerMomo
-        default:
-            return RowPalette.unknownOwner
         }
     }
 
@@ -2032,13 +2128,15 @@ private struct OpenIslandIcon: View {
     let size: CGFloat
     var isAnimating: Bool = false
     var tint: Color = .mint
+    var preset: OpenIslandBrandMark.Preset = .scout
 
     var body: some View {
         OpenIslandBrandMark(
             size: size,
             tint: tint,
             isAnimating: isAnimating,
-            style: .duotone
+            style: .duotone,
+            preset: preset
         )
     }
 }
@@ -2060,15 +2158,82 @@ private struct AttentionIndicator: View {
 
 private struct ClosedCountBadge: View {
     let liveCount: Int
+    let overflowCount: Int
     let tint: Color
 
     var body: some View {
-        Text("\(liveCount)")
+        Text(overflowCount > 0 ? "+\(overflowCount)" : "\(liveCount)")
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(Color(red: 0.14, green: 0.14, blue: 0.15), in: Capsule())
+    }
+}
+
+private struct ClosedSpotlightAgentView: View {
+    let session: AgentSession?
+    let identity: AppModel.AgentIdentity?
+    let overflowCount: Int
+    let liveCount: Int
+
+    private var avatarPreset: OpenIslandBrandMark.Preset {
+        guard let key = identity?.avatarPresetKey,
+              let preset = OpenIslandBrandMark.Preset(rawValue: key) else {
+            return .scout
+        }
+
+        return preset
+    }
+
+    private var tint: Color {
+        identity?.ownerColor ?? .mint
+    }
+
+    private var shortLabel: String {
+        session?.spotlightShortLabel ?? identity?.shortLabel ?? "AGT"
+    }
+
+    private var statusLabel: String {
+        session?.spotlightStatusLabel ?? "Idle"
+    }
+
+    private var handoffLabel: String? {
+        session?.spotlightHandoffLabel
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            OpenIslandIcon(size: 16, isAnimating: session?.phase == .running, tint: tint, preset: avatarPreset)
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text(shortLabel)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.94))
+
+                    if session?.phase.requiresAttention == true {
+                        AttentionIndicator(size: 10, color: .orange)
+                    }
+                }
+
+                Text(handoffLabel ?? statusLabel)
+                    .font(.system(size: 8.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            if liveCount > 1 || overflowCount > 0 {
+                Text(overflowCount > 0 ? "+\(overflowCount)" : "\(liveCount)")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(tint.opacity(0.95))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.06), in: Capsule())
+            }
+        }
     }
 }
 

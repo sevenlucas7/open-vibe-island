@@ -107,6 +107,45 @@ extension AgentSession {
         }
     }
 
+    var spotlightShortLabel: String {
+        if let ownerShortLabel = ownerShortLabel?.trimmedForSurface,
+           !ownerShortLabel.isEmpty {
+            return ownerShortLabel
+        }
+
+        if let ownerDisplayName = ownerDisplayName?.trimmedForSurface,
+           !ownerDisplayName.isEmpty {
+            return String(ownerDisplayName.prefix(4)).uppercased()
+        }
+
+        return tool.shortName
+    }
+
+    var spotlightHandoffLabel: String? {
+        if let explicit = handoffSummary?.trimmedForSurface,
+           !explicit.isEmpty {
+            return explicit
+        }
+
+        let candidates = [
+            summary.trimmedForSurface,
+            lastAssistantMessageText?.trimmedForSurface,
+        ]
+
+        for candidate in candidates.compactMap({ $0 }) {
+            let normalized = candidate.lowercased()
+            if normalized.contains("handoff")
+                || normalized.contains("handing off")
+                || normalized.contains("sending result to")
+                || normalized.contains("waiting for")
+                || normalized.contains("review") {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
     var spotlightTerminalLabel: String? {
         guard let jumpTarget else {
             return nil
