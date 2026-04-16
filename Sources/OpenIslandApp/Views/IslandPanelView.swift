@@ -1140,12 +1140,14 @@ private struct IslandSessionRow: View {
     @State private var isManuallyExpanded = false
 
     private struct BadgeModel: Identifiable {
-        enum Tone {
+        enum Tone: Equatable {
             case owner
             case source
             case blocked
             case priority(SessionPriority)
             case project
+            case waitingTime
+            case taskProgress
         }
 
         let id: String
@@ -1429,18 +1431,94 @@ private struct IslandSessionRow: View {
         return Array(badges.prefix(3))
     }
 
+    /// Task progress badge appended outside the core-3 metadata prefix.
+    private var taskProgressBadge: BadgeModel? {
+        guard let tasks = session.claudeMetadata?.activeTasks,
+              !tasks.isEmpty,
+              session.islandPresence(at: referenceDate) != .inactive else { return nil }
+        let done = tasks.filter { $0.status == .completed }.count
+        let total = tasks.count
+        return BadgeModel(
+            id: "task-progress",
+            title: "\(done)/\(total)",
+            icon: "list.bullet",
+            tone: .taskProgress
+        )
+    }
+
+    /// Elapsed-time badge for waiting/blocked states.
+    /// Uses TimelineView at the call-site to refresh once per second.
+    private var elapsedTimeBadge: BadgeModel? {
+        guard session.phase == .waitingForApproval || session.phase == .waitingForAnswer else { return nil }
+        let title = elapsedTimeString(since: session.updatedAt)
+        return BadgeModel(
+            id: "elapsed",
+            title: title,
+            icon: nil,
+            tone: .waitingTime
+        )
+    }
+
+    private func elapsedTimeString(since date: Date) -> String {
+        let seconds = Int(referenceDate.timeIntervalSince(date))
+        guard seconds > 0 else { return "00:00" }
+        if seconds < 3600 {
+            let m = seconds / 60
+            let s = seconds % 60
+            return String(format: "%02d:%02d", m, s)
+        } else {
+            let h = seconds / 3600
+            let m = (seconds % 3600) / 60
+            let s = seconds % 60
+            return String(format: "%d:%02d:%02d", h, m, s)
+        }
+    }
+
     @ViewBuilder
     private func badgeLane(presence: IslandSessionPresence) -> some View {
+        // B1.5 MVP: functional badges (task progress, elapsed time) are appended
+        // outside the core-3 metadata prefix so they always render when relevant.
+        // Elapsed time uses TimelineView to tick every second for live updates.
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                ForEach(metadataBadges) { badge in
-                    metadataBadge(badge, presence: presence)
+            fullBadgeLane(presence: presence)
+            compactBadgeLane(presence: presence)
+        }
+    }
+
+    @ViewBuilder
+    private func fullBadgeLane(presence: IslandSessionPresence) -> some View {
+        HStack(spacing: 6) {
+            ForEach(metadataBadges) { badge in
+                metadataBadge(badge, presence: presence)
+            }
+            if let taskBadge = taskProgressBadge {
+                metadataBadge(taskBadge, presence: presence)
+            }
+            // Elapsed time badge: ticks every second via TimelineView
+            if session.phase == .waitingForApproval || session.phase == .waitingForAnswer {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    if let elapsed = elapsedTimeBadge {
+                        metadataBadge(elapsed, presence: presence)
+                    }
                 }
             }
+        }
+    }
 
-            HStack(spacing: 6) {
-                ForEach(Array(metadataBadges.prefix(2))) { badge in
-                    metadataBadge(badge, presence: presence)
+    @ViewBuilder
+    private func compactBadgeLane(presence: IslandSessionPresence) -> some View {
+        HStack(spacing: 6) {
+            ForEach(Array(metadataBadges.prefix(2))) { badge in
+                metadataBadge(badge, presence: presence)
+            }
+            if let taskBadge = taskProgressBadge {
+                metadataBadge(taskBadge, presence: presence)
+            }
+            if session.phase == .waitingForApproval || session.phase == .waitingForAnswer {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    if let elapsed = elapsedTimeBadge {
+                        metadataBadge(elapsed, presence: presence)
+                    }
                 }
             }
         }
@@ -1751,11 +1829,30 @@ private struct IslandSessionRow: View {
         }
     }
 
+    @ViewBuilder
     private func statusDot(for presence: IslandSessionPresence) -> some View {
-        Circle()
-            .fill(statusTint(for: presence))
-            .frame(width: 9, height: 9)
-            .padding(.top, 6)
+        let tint = statusTint(for: presence)
+        let shouldPulse = session.phase == .running && presence != .inactive
+
+        if shouldPulse {
+            // B1.5 MVP: subtle alive pulse — breath, not bounce.
+            // Uses .periodic to drive a sine-wave opacity: 0.48 → 1.0.
+            TimelineView(.periodic(from: .now, by: 0.07)) { timeline in
+                let elapsed = timeline.date.timeIntervalSinceReferenceDate
+                let phase = sin(elapsed * 0.45)
+                let opacity = 0.48 + (1.0 - 0.48) * max(0, phase)
+                Circle()
+                    .fill(tint)
+                    .opacity(opacity)
+                    .frame(width: 9, height: 9)
+                    .padding(.top, 6)
+            }
+        } else {
+            Circle()
+                .fill(tint)
+                .frame(width: 9, height: 9)
+                .padding(.top, 6)
+        }
     }
 
     /// Prompt line for manually expanded inactive rows (bypasses time-based filter).
@@ -1791,6 +1888,8 @@ private struct IslandSessionRow: View {
         presence: IslandSessionPresence
     ) -> some View {
         let palette = badgePalette(for: badge, presence: presence)
+        // waitingTime uses monospaced for elapsed-clock readability
+        let isMonospaced = badge.tone == .waitingTime
 
         return HStack(spacing: 4) {
             if let icon = badge.icon {
@@ -1798,7 +1897,7 @@ private struct IslandSessionRow: View {
                     .font(.system(size: 7.5, weight: .bold))
             }
             Text(badge.title)
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.system(size: 9, weight: .bold, design: isMonospaced ? .monospaced : .default))
                 .lineLimit(1)
         }
         .foregroundStyle(palette.foreground)
@@ -1873,6 +1972,20 @@ private struct IslandSessionRow: View {
                 background: Color(red: 0.09, green: 0.13, blue: 0.15).opacity(dimmedOpacity),
                 border: (displayIdentity?.ownerColor ?? RowPalette.agentAlive).opacity(0.18 * dimmedOpacity),
                 foreground: (displayIdentity?.ownerColor ?? RowPalette.agentAlive).opacity(0.88 * dimmedOpacity)
+            )
+        case .waitingTime:
+            // Orange accent to match waiting/warning tone; monospaced for clock readability
+            return (
+                background: RowPalette.surfaceWarning.opacity(dimmedOpacity),
+                border: RowPalette.warning.opacity(0.28 * dimmedOpacity),
+                foreground: RowPalette.warning.opacity(dimmedOpacity)
+            )
+        case .taskProgress:
+            // Subtle blue tint — informational, not alarming
+            return (
+                background: Color(red: 0.09, green: 0.12, blue: 0.22).opacity(dimmedOpacity),
+                border: Color(red: 0.38, green: 0.65, blue: 0.98).opacity(0.22 * dimmedOpacity),
+                foreground: Color(red: 0.58, green: 0.75, blue: 1.0).opacity(dimmedOpacity)
             )
         }
     }
