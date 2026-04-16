@@ -135,11 +135,11 @@ struct IslandPanelView: View {
     }
 
     private var closedSpotlightSession: AgentSession? {
-        model.spotlightSession
+        model.productSpotlightSession
     }
 
     private var hasClosedPresence: Bool {
-        model.liveSessionCount > 0
+        model.productLiveSessionCount > 0
     }
 
     /// Whether any session has activity worth showing in the closed notch
@@ -152,7 +152,7 @@ struct IslandPanelView: View {
 
     /// Scout icon tint: blue if any running, green if any live, else gray.
     private var scoutTint: Color {
-        let sessions = model.surfacedSessions
+        let sessions = model.productSurfacedSessions
         if sessions.contains(where: { $0.phase == .running }) {
             return Color(red: 0.43, green: 0.62, blue: 1.0) // #6E9FFF working blue
         }
@@ -167,7 +167,7 @@ struct IslandPanelView: View {
             return closedRightAnchorWidth
         }
 
-        let digits = max(1, "\(model.liveSessionCount)".count)
+        let digits = max(1, "\(model.productLiveSessionCount)".count)
         return CGFloat(26 + max(0, digits - 1) * 8)
     }
 
@@ -447,14 +447,14 @@ struct IslandPanelView: View {
                     .padding(.bottom, 10)
             }
 
-            if model.hasAnySession {
+            if model.hasVisibleProductSessions {
                 islandSummaryStrip
                     .padding(.bottom, 10)
             }
 
-            if model.shouldShowSessionBootstrapPlaceholder {
+            if model.shouldShowProductBootstrapPlaceholder {
                 sessionBootstrapPlaceholder
-            } else if model.islandListSessions.isEmpty {
+            } else if model.productIslandListSessions.isEmpty {
                 emptyState
             } else {
                 sessionList
@@ -501,9 +501,9 @@ struct IslandPanelView: View {
 
     private var islandSummaryStrip: some View {
         HStack(spacing: 8) {
-            headerPill("Active \(model.activeAgentCount)", tint: .white.opacity(0.92))
-            headerPill("Approval \(model.approvalCount)", tint: model.approvalCount > 0 ? .orange.opacity(0.96) : .white.opacity(0.52))
-            headerPill("Done \(model.doneCount)", tint: .white.opacity(0.52))
+            headerPill("Active \(model.productActiveAgentCount)", tint: .white.opacity(0.92))
+            headerPill("Approval \(model.productApprovalCount)", tint: model.productApprovalCount > 0 ? .orange.opacity(0.96) : .white.opacity(0.52))
+            headerPill("Done \(model.productDoneCount)", tint: .white.opacity(0.52))
             Spacer(minLength: 0)
         }
     }
@@ -532,7 +532,7 @@ struct IslandPanelView: View {
             Text(model.lang.t("island.noTerminals"))
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white.opacity(0.4))
-            Text(model.recentSessions.isEmpty
+            Text(model.productRecentSessions.isEmpty
                 ? model.lang.t("island.startAgent")
                 : model.lang.t("island.recentSessions"))
                 .font(.system(size: 12))
@@ -582,7 +582,7 @@ struct IslandPanelView: View {
                     .frame(maxHeight: Self.maxSessionListHeight)
                     .focusable()
                     .onAppear {
-                        keyboardSelectedSessionID = keyboardSelectedSessionID ?? model.spotlightSession?.id
+                        keyboardSelectedSessionID = keyboardSelectedSessionID ?? model.productSpotlightSession?.id
                     }
                     .onMoveCommand { direction in
                         handleMoveCommand(direction, proxy: proxy)
@@ -595,7 +595,7 @@ struct IslandPanelView: View {
     @ViewBuilder
     private func sessionListContent(context: TimelineViewDefaultContext) -> some View {
         VStack(spacing: 6) {
-            if isNotificationMode, let session = model.activeIslandCardSession {
+            if isNotificationMode, let session = model.activeIslandCardSession, model.isSupportedProductSession(session) {
                 IslandSessionRow(
                     model: model,
                     session: session,
@@ -609,12 +609,12 @@ struct IslandPanelView: View {
                     onJump: { model.jumpToSession(session) }
                 )
 
-                if model.allSessions.count > 1 {
+                if model.productIslandListSessions.count > 1 {
                     Button {
                         let isCompletion = session.phase == .completed
                         model.expandNotificationToSessionList(clearExpansion: isCompletion)
                     } label: {
-                        Text(model.lang.t("island.showAll", model.allSessions.count))
+                        Text(model.lang.t("island.showAll", model.productIslandListSessions.count))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white.opacity(0.45))
                             .frame(maxWidth: .infinity)
@@ -623,15 +623,15 @@ struct IslandPanelView: View {
                     .buttonStyle(.plain)
                 }
             } else {
-                if let approvalSession = model.approvalPinnedSession {
+                if let approvalSession = model.productApprovalPinnedSession {
                     sessionSectionHeader("Attention")
                     sessionRowView(for: approvalSession, at: context.date)
                         .id(approvalSession.id)
                 }
 
-                let remainingAttention = model.attentionSessions.filter { $0.id != model.approvalPinnedSession?.id }
+                let remainingAttention = model.productAttentionSessions.filter { $0.id != model.productApprovalPinnedSession?.id }
                 if !remainingAttention.isEmpty {
-                    if model.approvalPinnedSession == nil {
+                    if model.productApprovalPinnedSession == nil {
                         sessionSectionHeader("Attention")
                     }
                     ForEach(remainingAttention) { session in
@@ -640,17 +640,17 @@ struct IslandPanelView: View {
                     }
                 }
 
-                if !model.activeSessions.isEmpty {
+                if !model.productActiveSessions.isEmpty {
                     sessionSectionHeader("Active")
-                    ForEach(model.activeSessions) { session in
+                    ForEach(model.productActiveSessions) { session in
                         sessionRowView(for: session, at: context.date)
                             .id(session.id)
                     }
                 }
 
-                if !model.recentCompletedSessions.isEmpty {
+                if !model.productRecentCompletedSessions.isEmpty {
                     sessionSectionHeader("Recent")
-                    ForEach(model.recentCompletedSessions.prefix(8)) { session in
+                    ForEach(model.productRecentCompletedSessions.prefix(8)) { session in
                         sessionRowView(for: session, at: context.date)
                             .id(session.id)
                     }
@@ -687,12 +687,12 @@ struct IslandPanelView: View {
 
     private var navigableSessionIDs: [String] {
         var ids: [String] = []
-        if let approvalID = model.approvalPinnedSession?.id {
+        if let approvalID = model.productApprovalPinnedSession?.id {
             ids.append(approvalID)
         }
-        ids.append(contentsOf: model.attentionSessions.map(\.id).filter { $0 != model.approvalPinnedSession?.id })
-        ids.append(contentsOf: model.activeSessions.map(\.id))
-        ids.append(contentsOf: model.recentCompletedSessions.prefix(8).map(\.id))
+        ids.append(contentsOf: model.productAttentionSessions.map(\.id).filter { $0 != model.productApprovalPinnedSession?.id })
+        ids.append(contentsOf: model.productActiveSessions.map(\.id))
+        ids.append(contentsOf: model.productRecentCompletedSessions.prefix(8).map(\.id))
         return ids
     }
 
@@ -2257,7 +2257,7 @@ struct MenuBarContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(model.lang.t("app.name.oss"))
                 .font(.headline)
-            Text(model.lang.t("menu.status", model.liveSessionCount, model.liveAttentionCount))
+            Text(model.lang.t("menu.status", model.productLiveSessionCount, model.productApprovalCount))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -2288,53 +2288,14 @@ struct MenuBarContentView: View {
 
             Divider()
 
-            Text(model.codexHookStatusTitle)
+            Text(model.openClawStatusTitle)
                 .font(.subheadline.weight(.semibold))
-            Text(model.codexHookStatusSummary)
+            Text(model.openClawStatusDetail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button(model.lang.t("menu.refreshCodexHooks")) {
-                model.refreshCodexHookStatus()
-            }
-
-            if model.codexHooksInstalled {
-                Button(model.lang.t("menu.uninstallCodexHooks")) {
-                    model.uninstallCodexHooks()
-                }
-            } else {
-                Button(model.lang.t("menu.installCodexHooks")) {
-                    model.installCodexHooks()
-                }
-                .disabled(model.hooksBinaryURL == nil)
-            }
-
-            Divider()
-
-            Text(model.claudeHookStatusTitle)
-                .font(.subheadline.weight(.semibold))
-            Text(model.claudeHookStatusSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button(model.lang.t("menu.refreshClaudeHooks")) {
-                model.refreshClaudeHookStatus()
-            }
-
-            if model.claudeHooksInstalled {
-                Button(model.lang.t("menu.uninstallClaudeHooks")) {
-                    model.uninstallClaudeHooks()
-                }
-            } else {
-                Button(model.lang.t("menu.installClaudeHooks")) {
-                    model.installClaudeHooks()
-                }
-                .disabled(model.hooksBinaryURL == nil)
-            }
-
-            if let session = model.focusedSession {
+            if let session = model.productFocusedSession {
                 Divider()
                 Text(session.title)
                     .font(.subheadline.weight(.semibold))

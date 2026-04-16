@@ -87,6 +87,12 @@ struct OpenClawDiscovery {
             agentIDs: ["claw_momo", "momo"],
             lookupTokens: ["momo", "claw momo"]
         ),
+        OwnerDescriptor(
+            displayName: "Hermes",
+            teamRole: "Xteam",
+            agentIDs: ["hermes", "claw_hermes"],
+            lookupTokens: ["hermes", "claw hermes"]
+        ),
     ]
 
     private let commandRunner: CommandRunner

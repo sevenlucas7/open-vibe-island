@@ -32,6 +32,8 @@ final class AppModel {
         "claw pipi": "Pipi",
         "momo": "Momo",
         "claw momo": "Momo",
+        "hermes": "Hermes",
+        "claw hermes": "Hermes",
     ]
     private static let defaultOwnerDisplayNamesByTool: [AgentTool: String] = [
         .codex: "Seven",
@@ -49,6 +51,7 @@ final class AppModel {
         "fanshu": AgentIdentity(displayName: "Fanshu", shortLabel: "FAN", ownerColor: Color(red: 0.96, green: 0.45, blue: 0.71), avatarPresetKey: "flare", animationProfileKey: "flicker"),
         "pipi": AgentIdentity(displayName: "Pipi", shortLabel: "PIP", ownerColor: Color(red: 0.38, green: 0.65, blue: 0.98), avatarPresetKey: "array", animationProfileKey: "scan"),
         "momo": AgentIdentity(displayName: "Momo", shortLabel: "MOM", ownerColor: Color(red: 0.65, green: 0.55, blue: 0.98), avatarPresetKey: "halo", animationProfileKey: "glow"),
+        "hermes": AgentIdentity(displayName: "Hermes", shortLabel: "HRM", ownerColor: Color(red: 0.96, green: 0.73, blue: 0.31), avatarPresetKey: "halo", animationProfileKey: "glow"),
     ]
     static let hoverOpenDelay: TimeInterval = 0.15
 
@@ -398,6 +401,76 @@ final class AppModel {
         surfacedSessions.filter { $0.tool == .openClaw }
     }
 
+    var productSurfacedSessions: [AgentSession] {
+        surfacedSessions.filter(isSupportedProductSession)
+    }
+
+    var productRecentSessions: [AgentSession] {
+        recentSessions.filter(isSupportedProductSession)
+    }
+
+    var productIslandListSessions: [AgentSession] {
+        productSurfacedSessions
+    }
+
+    var productLiveSessionCount: Int {
+        productSurfacedSessions.count
+    }
+
+    var productActiveAgentCount: Int {
+        productSurfacedSessions.filter { $0.phase == .running || $0.phase.requiresAttention }.count
+    }
+
+    var productApprovalCount: Int {
+        productSurfacedSessions.filter { $0.phase == .waitingForApproval }.count
+    }
+
+    var productDoneCount: Int {
+        productSurfacedSessions.filter { $0.phase == .completed }.count
+    }
+
+    var hasVisibleProductSessions: Bool {
+        !productSurfacedSessions.isEmpty
+    }
+
+    var productSpotlightSession: AgentSession? {
+        productSurfacedSessions.max(by: { spotlightScore(for: $0) < spotlightScore(for: $1) })
+    }
+
+    var productFocusedSession: AgentSession? {
+        if let selectedSessionID,
+           let selected = productSurfacedSessions.first(where: { $0.id == selectedSessionID }) {
+            return selected
+        }
+
+        return productSpotlightSession
+            ?? productSurfacedSessions.first(where: { $0.phase.requiresAttention })
+            ?? productSurfacedSessions.first
+    }
+
+    var productApprovalPinnedSession: AgentSession? {
+        productSurfacedSessions.first(where: { $0.phase == .waitingForApproval })
+    }
+
+    var productAttentionSessions: [AgentSession] {
+        productSurfacedSessions.filter { $0.phase.requiresAttention }
+    }
+
+    var productActiveSessions: [AgentSession] {
+        productSurfacedSessions.filter { !$0.phase.requiresAttention && $0.phase == .running }
+    }
+
+    var productRecentCompletedSessions: [AgentSession] {
+        let surfacedIDs = Set(productSurfacedSessions.map(\.id))
+        return state.sessions
+            .filter(isSupportedProductSession)
+            .filter { !surfacedIDs.contains($0.id) || $0.phase == .completed }
+    }
+
+    var shouldShowProductBootstrapPlaceholder: Bool {
+        isResolvingInitialLiveSessions && productLiveSessionCount == 0 && openClawAvailability == nil
+    }
+
     var spotlightSession: AgentSession? {
         surfacedSessions.max(by: { spotlightScore(for: $0) < spotlightScore(for: $1) })
     }
@@ -483,8 +556,12 @@ final class AppModel {
         !sessions.isEmpty
     }
 
-    var hasCodexSession: Bool {
-        sessions.contains(where: { $0.tool == .codex })
+    var hasOpenClawSession: Bool {
+        openClawSessions.contains(where: { $0.phase == .running || $0.phase.requiresAttention || $0.phase == .completed })
+    }
+
+    var hasResolvedOwnerLane: Bool {
+        openClawSessions.contains(where: { displayOwner(for: $0) != nil })
     }
 
     var hasJumpableSession: Bool {
@@ -500,10 +577,10 @@ final class AppModel {
                 isComplete: isBridgeReady
             ),
             AcceptanceStep(
-                id: "hooks",
-                title: "Codex hooks installed",
-                detail: "Managed `hooks.json` entries should be present in `~/.codex`.",
-                isComplete: hooks.codexHooksInstalled
+                id: "openclaw",
+                title: "OpenClaw visibility detected",
+                detail: "The local OpenClaw CLI should respond and expose Xteam visibility rows.",
+                isComplete: hasDetectedOpenClaw
             ),
             AcceptanceStep(
                 id: "overlay",
@@ -513,15 +590,15 @@ final class AppModel {
             ),
             AcceptanceStep(
                 id: "session",
-                title: "A Codex session is observed",
-                detail: "Start Codex in Terminal and wait for the first session row to appear.",
-                isComplete: hasCodexSession
+                title: "An OpenClaw session is observed",
+                detail: "Let OpenClaw surface at least one recent team row in the island.",
+                isComplete: hasOpenClawSession
             ),
             AcceptanceStep(
-                id: "jump",
-                title: "Jump target captured",
-                detail: "At least one session should include terminal jump metadata.",
-                isComplete: hasJumpableSession
+                id: "owner",
+                title: "Owner lane resolved",
+                detail: "At least one visible row should resolve to an owner such as Seven or Hermes.",
+                isComplete: hasResolvedOwnerLane
             ),
         ]
     }
@@ -552,14 +629,14 @@ final class AppModel {
 
     var acceptanceStatusSummary: String {
         if hasPassedAcceptanceFlow {
-            return "The current build has completed the first-run checklist end to end."
+            return "The current build has completed the OpenClaw cockpit checklist end to end."
         }
 
         if isReadyForFirstAcceptance {
-            return "You can start your first acceptance run now. Launch Codex in Terminal and walk the last two steps."
+            return "You can start your first acceptance run now. Let OpenClaw surface a live team row and confirm the owner lane renders correctly."
         }
 
-        return "Finish the setup steps in the left column, then start Codex from Terminal."
+        return "Finish the OpenClaw visibility checks, then bring in a recent team row for verification."
     }
 
     func startIfNeeded(
@@ -659,7 +736,7 @@ final class AppModel {
             do {
                 try await client.send(.registerClient(role: .observer))
                 self.isBridgeReady = true
-                self.lastActionMessage = "Bridge ready. Waiting for Claude and Codex hook events."
+                self.lastActionMessage = "Bridge ready. Waiting for OpenClaw visibility and local session events."
                 self.harnessRuntimeMonitor?.recordMilestone("bridgeReady", message: self.lastActionMessage)
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1024,26 +1101,12 @@ final class AppModel {
         hooks.hooksBinaryURL = payload.hooksBinaryURL
         hooks.updateHooksBinaryIfNeeded()
 
-        // Auto-install missing hooks and usage bridge, then run health checks.
+        // Keep legacy hook status readable for debugging, but do not auto-install
+        // upstream agent integrations in the Xteam-focused fork.
         if payload.hooksBinaryURL != nil {
             Task { @MainActor [weak self] in
                 guard let self else { return }
-
-                // Wait for all status reads to complete before checking install state.
                 await self.hooks.refreshAllHookStatusAndWait()
-
-                if !self.claudeHooksInstalled { self.installClaudeHooks() }
-                if !self.codexHooksInstalled { self.installCodexHooks() }
-                if !self.qoderHooksInstalled { self.installQoderHooks() }
-                if !self.factoryHooksInstalled { self.installFactoryHooks() }
-                if !self.codebuddyHooksInstalled { self.installCodebuddyHooks() }
-                if !self.openCodePluginInstalled { self.installOpenCodePlugin() }
-                if !self.cursorHooksInstalled { self.installCursorHooks() }
-                if !self.claudeUsageInstalled { self.installClaudeUsageBridge() }
-
-                // Run health checks after install to detect stale paths, conflicts, etc.
-                try? await Task.sleep(for: .milliseconds(500))
-                await self.hooks.repairHooksIfNeeded()
             }
         }
 
@@ -1103,6 +1166,14 @@ final class AppModel {
         let primaryIDs = Set(primary.map(\.id))
         let overflow = rankedSessions.filter { !primaryIDs.contains($0.id) && !$0.isSubagentSession }
         return (primary, overflow)
+    }
+
+    func isSupportedProductSession(_ session: AgentSession) -> Bool {
+        if session.tool == .openClaw {
+            return true
+        }
+
+        return normalizedOwnerDisplayName(from: session.ownerDisplayName) == "Hermes"
     }
 
     func displayOwner(for session: AgentSession) -> String? {

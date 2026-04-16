@@ -743,6 +743,61 @@ struct AppModelSessionListTests {
     }
 
     @Test
+    func productIslandListSessionsOnlyShowOpenClawLaneByDefault() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let model = AppModel()
+
+        var openClawSession = AgentSession(
+            id: "openclaw-seven",
+            title: "OpenClaw · Xteam",
+            tool: .openClaw,
+            origin: .live,
+            attachmentState: .attached,
+            phase: .running,
+            summary: "OpenClaw row",
+            updatedAt: now,
+            ownerDisplayName: "Seven"
+        )
+        openClawSession.isProcessAlive = true
+
+        var codexSession = AgentSession(
+            id: "codex-hidden",
+            title: "Codex · legacy",
+            tool: .codex,
+            origin: .live,
+            attachmentState: .attached,
+            phase: .running,
+            summary: "Legacy row",
+            updatedAt: now.addingTimeInterval(-30)
+        )
+        codexSession.isProcessAlive = true
+
+        model.state = SessionState(sessions: [codexSession, openClawSession])
+
+        #expect(model.surfacedSessions.map(\.id) == ["openclaw-seven", "codex-hidden"])
+        #expect(model.productIslandListSessions.map(\.id) == ["openclaw-seven"])
+    }
+
+    @Test
+    func hermesOwnerResolvesToDedicatedIdentity() {
+        let model = AppModel()
+        let session = AgentSession(
+            id: "openclaw-hermes",
+            title: "OpenClaw · Hermes",
+            tool: .openClaw,
+            origin: .live,
+            attachmentState: .attached,
+            phase: .running,
+            summary: "Hermes active",
+            updatedAt: Date(timeIntervalSince1970: 2_000),
+            ownerDisplayName: "hermes"
+        )
+
+        #expect(model.displayOwner(for: session) == "Hermes")
+        #expect(model.identity(for: session)?.shortLabel == "HRM")
+    }
+
+    @Test
     func compositeSortingPrioritizesWaitingCriticalAndSevenSessions() {
         let now = Date(timeIntervalSince1970: 2_000)
         let model = AppModel()

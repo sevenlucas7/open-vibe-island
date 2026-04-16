@@ -446,17 +446,15 @@ final class OverlayPanelController {
     private func closedPanelWidth(for model: AppModel, on screen: NSScreen) -> CGFloat {
         let notchWidth = screen.notchSize.width
         let notchHeight = screen.islandClosedHeight
-        let spotlightSession = model.surfacedSessions.first(where: { $0.phase.requiresAttention })
-            ?? model.surfacedSessions.first(where: { $0.phase == .running })
-            ?? model.surfacedSessions.first
-        let hasClosedPresence = model.liveSessionCount > 0
+        let spotlightSession = model.productSpotlightSession
+        let hasClosedPresence = model.productLiveSessionCount > 0
 
         guard hasClosedPresence else {
             return notchWidth
         }
 
         let sideWidth = max(0, notchHeight - 12) + 10
-        let digits = max(1, "\(model.liveSessionCount)".count)
+        let digits = max(1, "\(model.productLiveSessionCount)".count)
         let countBadgeWidth = CGFloat(26 + max(0, digits - 1) * 8)
         let hasAttention = spotlightSession?.phase.requiresAttention == true
         let leftWidth = sideWidth + 8 + (hasAttention ? 18 : 0)
@@ -469,7 +467,7 @@ final class OverlayPanelController {
     private func openedContentHeight(for model: AppModel) -> CGFloat {
         let now = Date.now
         let visibleSessions = openedVisibleSessions(
-            sessions: model.islandListSessions
+            sessions: model.productIslandListSessions
         )
 
         if visibleSessions.isEmpty {

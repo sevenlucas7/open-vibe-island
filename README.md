@@ -7,7 +7,7 @@
 > Fork note: `Open Vibe Island for Xteam` is a targeted fork focused on team-aware session visibility, team cockpit orientation, and Xteam workflow optimization.
 
 <p align="center">
-  The open-source macOS team cockpit for AI coding agents.
+  The open-source macOS island cockpit for OpenClaw and Hermes-aware team work.
   <br>
   <a href="README.zh-CN.md">中文</a> | <strong>English</strong>
 </p>
@@ -45,7 +45,7 @@ This section is written for humans.
 
 ### What This Is
 
-`Open Vibe Island for Xteam` is an open-source [Vibe Island](https://vibeisland.app/) alternative for heavy code-agent users on macOS, with a fork-specific focus on team-aware visibility and cockpit-style coordination. Currently supports **Claude Code**, **Codex**, **Cursor**, **OpenCode**, **Qoder**, **Factory**, and **CodeBuddy**, with terminal integration for **Terminal.app**, **Ghostty**, **cmux**, **Kaku**, **WezTerm**, **iTerm2**, and **Zellij**, plus fallback detection for Warp.
+`Open Vibe Island for Xteam` is an open-source [Vibe Island](https://vibeisland.app/) alternative for OpenClaw-first teams on macOS, with a fork-specific focus on owner-aware visibility, approval-aware coordination, and a cockpit surface tailored for Seven's workflow. The default product surface now centers on **OpenClaw** rows and **Hermes** owner identity rendering. Legacy upstream integrations remain in the codebase for low-risk sync, but they are intentionally hidden from the default Xteam UI.
 
 This is a community project. We provide the basics: code agent communication, a mac island app shell, and some fundamental features. We welcome anyone to build on top of this and turn ideas into real features for everyone. Read the [Roadmap](docs/roadmap.md) and [Contributing](CONTRIBUTING.md) docs for more info.
 
@@ -75,7 +75,7 @@ We welcome any issues and pull requests. We are also looking for others to join 
 
 ### Notes
 
-This app may install hooks for Claude Code, Codex, or Cursor, so you may see hook-related output inside those sessions. See [docs/hooks.md](docs/hooks.md) for the full list of supported hook events and the directive protocol.
+This fork no longer auto-installs upstream agent hooks on startup. Legacy hook managers remain available in code for debugging and future upstream sync, but the default product lane is OpenClaw visibility plus owner metadata such as Hermes.
 
 ### Feature Status
 
@@ -83,14 +83,9 @@ This app may install hooks for Claude Code, Codex, or Cursor, so you may see hoo
 
 | Agent | Status | Description |
 |---|---|---|
-| **Claude Code** | Supported | Hook integration, JSONL session discovery, status line bridge, usage tracking |
-| **Codex** | Supported | Full hook integration (SessionStart, UserPromptSubmit, Stop), usage tracking |
-| **OpenCode** | Supported | JS plugin integration, permission/question flows, process detection |
-| **Qoder** | Supported | Claude Code fork — same hook format, config at `~/.qoder/settings.json` |
-| **Factory** | Supported | Claude Code fork — same hook format, config at `~/.factory/settings.json` |
-| **CodeBuddy** | Supported | Claude Code fork — same hook format, config at `~/.codebuddy/settings.json` |
-| **Cursor** | Supported | Hook integration via `~/.cursor/hooks.json`, session tracking, workspace jump-back |
-| **Gemini CLI** | Planned | — |
+| **OpenClaw** | Supported | Local CLI discovery, Xteam owner rows, approval-aware visibility, project metadata surfacing |
+| **Hermes** | Partial | Rendered as an owner identity inside OpenClaw session metadata, dedicated runtime bridge still pending |
+| **Legacy upstream agents** | Hidden by default | Claude Code, Codex, Cursor, OpenCode, Qoder, Factory, CodeBuddy, and Gemini CLI remain in the codebase but are not exposed in the default Xteam product UI |
 
 #### Supported Terminals
 
@@ -199,13 +194,9 @@ Developers who already live in the terminal and want a better way to work with c
 
 ### Agent Integrations
 
-- **Codex** — Full hook-based integration. Receives `SessionStart`, `UserPromptSubmit`, and `Stop` events by default. Reads 5-hour and 7-day account usage windows from local rollout files. Install/uninstall managed hooks from the control center or CLI.
-- **Claude Code** — Hook-based integration via `~/.claude/settings.json`. Discovers sessions from `~/.claude/projects/` JSONL transcripts. Persists and restores sessions across app launches. Managed status line bridge with opt-in installation. Reads cached 5-hour and 7-day usage windows.
-- **OpenCode** — JS plugin integration via `~/.config/opencode/plugins/`. Plugin auto-installed on first launch. Receives session lifecycle, tool use, permission, and question events. Permission approval and question answering flows supported. Process detection via `ps`.
-- **Qoder** — Claude Code fork. Same hook format and events via `~/.qoder/settings.json`. Use `--source qoder` with the hooks binary.
-- **Factory** — Claude Code fork. Same hook format and events via `~/.factory/settings.json`. Use `--source factory` with the hooks binary.
-- **CodeBuddy** — Claude Code fork. Same hook format and events via `~/.codebuddy/settings.json`. Use `--source codebuddy` with the hooks binary.
-- **Cursor** — Hook-based integration via `~/.cursor/hooks.json`. Receives `beforeSubmitPrompt`, `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, `afterFileEdit`, and `stop` events. Session persistence across app launches. Workspace jump-back via `cursor -r`. Use `--source cursor` with the hooks binary.
+- **OpenClaw** — First-class product lane in the Xteam fork. Discovers local OpenClaw sessions via CLI, lifts owner/project/priority metadata into the island, and treats approvals plus blockers as cockpit signals.
+- **Hermes** — Currently supported as an owner identity layered on top of OpenClaw visibility. The fork resolves Hermes rows and avatar styling when upstream session metadata or task ownership exposes that identity.
+- **Legacy upstream agents** — Claude Code, Codex, OpenCode, Cursor, Qoder, Factory, CodeBuddy, and Gemini CLI still exist as compatibility code paths, but the default Xteam build hides their setup/install surface until they are intentionally reintroduced.
 
 ### Terminal Support
 
@@ -215,7 +206,7 @@ Developers who already live in the terminal and want a better way to work with c
 ### UI & Display
 
 - **Notch overlay** — On Macs with a built-in notch, the island sits in the notch area; on external displays or non-notch Macs, it falls back to a compact top-center bar
-- **Control center** — Codex/Claude hook status, usage dashboard, debug scenarios
+- **Control center** — OpenClaw visibility status, acceptance checklist, debug scenarios
 - **Settings** — General, Display, Sound, Shortcuts, Lab (advanced), About
 - **Notification mode** — Auto-height notification panel for permission requests and session events
 - **Notification sounds** — Configurable system sounds (default: Bottle) with mute toggle
@@ -255,11 +246,11 @@ zsh scripts/package-app.sh
 
 That script creates `output/package/Open Island.app` and `output/package/Open Island.zip`. Pass `OPEN_ISLAND_SIGN_IDENTITY` to sign the bundle. See [docs/packaging.md](docs/packaging.md) for the full path, including notarization.
 
-### Connect Codex
+### Connect OpenClaw
 
-Open the package in Xcode to run the macOS app target. On launch, the app restores its local cache, scans recent `~/.codex/sessions/**/rollout-*.jsonl` files for existing Codex sessions, and starts the live bridge for new hook events.
+Open the package in Xcode to run the macOS app target. On launch, the app restores its local cache, queries the local OpenClaw CLI for recent Xteam session visibility, and starts the bridge layer for any remaining local session events.
 
-The control center shows live Codex hook install status from `~/.codex`, and can install or uninstall managed hook entries directly. Installs copy the helper into `~/Library/Application Support/OpenIsland/bin/OpenIslandHooks` so repo renames do not break existing hooks.
+The control center in this fork focuses on OpenClaw visibility, owner-lane rendering, and first-run acceptance for the Xteam cockpit. Legacy hook management remains in code for compatibility work, but it is no longer the primary setup story.
 
 ```bash
 swift build -c release --product OpenIslandHooks
@@ -268,7 +259,7 @@ swift run OpenIslandSetup status
 swift run OpenIslandSetup uninstall
 ```
 
-### Connect Claude Code
+### Legacy Claude Code notes
 
 Claude usage setup is available from the app's control center and remains opt-in. The bridge writes a managed `statusLine.command` to `~/.open-island/bin/open-island-statusline`, caches `rate_limits` into `/tmp/open-island-rl.json`, and refuses to overwrite an existing custom status line automatically.
 

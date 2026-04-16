@@ -329,194 +329,27 @@ struct AboutSettingsPane: View {
 struct SetupSettingsPane: View {
     var model: AppModel
 
-    @State private var confirmingUninstallClaude = false
-    @State private var confirmingUninstallCodex = false
-    @State private var confirmingUninstallOpenCode = false
-    @State private var confirmingUninstallQoder = false
-    @State private var confirmingUninstallFactory = false
-    @State private var confirmingUninstallCodebuddy = false
-    @State private var confirmingUninstallCursor = false
-
     private var lang: LanguageManager { model.lang }
 
     var body: some View {
         Form {
-            Section(lang.t("setup.section.hooks")) {
-                hookRow(
-                    name: "Claude Code",
-                    installed: model.claudeHooksInstalled,
-                    busy: model.isClaudeHookSetupBusy,
-                    installAction: { model.installClaudeHooks() },
-                    uninstallAction: { confirmingUninstallClaude = true }
-                )
-                .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallClaude) {
-                    Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
-                        model.uninstallClaudeHooks()
-                    }
-                    Button(lang.t("settings.general.cancel"), role: .cancel) {}
-                } message: {
-                    Text(lang.t("settings.general.uninstallConfirmMessage.claude"))
-                }
-
-                hookRow(
-                    name: "Codex",
-                    installed: model.codexHooksInstalled,
-                    busy: model.isCodexSetupBusy,
-                    installAction: { model.installCodexHooks() },
-                    uninstallAction: { confirmingUninstallCodex = true }
-                )
-                .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallCodex) {
-                    Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
-                        model.uninstallCodexHooks()
-                    }
-                    Button(lang.t("settings.general.cancel"), role: .cancel) {}
-                } message: {
-                    Text(lang.t("settings.general.uninstallConfirmMessage.codex"))
-                }
-
-                hookRow(
-                    name: "OpenCode",
-                    installed: model.openCodePluginInstalled,
-                    busy: model.isOpenCodeSetupBusy,
-                    requiresBinary: false,
-                    installAction: { model.installOpenCodePlugin() },
-                    uninstallAction: { confirmingUninstallOpenCode = true }
-                )
-                .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallOpenCode) {
-                    Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
-                        model.uninstallOpenCodePlugin()
-                    }
-                    Button(lang.t("settings.general.cancel"), role: .cancel) {}
-                } message: {
-                    Text("This will remove the Open Island plugin from ~/.config/opencode/plugins/.")
-                }
-
-                hookRow(
-                    name: "Qoder",
-                    installed: model.qoderHooksInstalled,
-                    busy: model.isQoderHookSetupBusy,
-                    installAction: { model.installQoderHooks() },
-                    uninstallAction: { confirmingUninstallQoder = true }
-                )
-                .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallQoder) {
-                    Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
-                        model.uninstallQoderHooks()
-                    }
-                    Button(lang.t("settings.general.cancel"), role: .cancel) {}
-                } message: {
-                    Text("This will remove Open Island hooks from ~/.qoder/settings.json.")
-                }
-
-                hookRow(
-                    name: "Factory",
-                    installed: model.factoryHooksInstalled,
-                    busy: model.isFactoryHookSetupBusy,
-                    installAction: { model.installFactoryHooks() },
-                    uninstallAction: { confirmingUninstallFactory = true }
-                )
-                .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallFactory) {
-                    Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
-                        model.uninstallFactoryHooks()
-                    }
-                    Button(lang.t("settings.general.cancel"), role: .cancel) {}
-                } message: {
-                    Text("This will remove Open Island hooks from ~/.factory/settings.json.")
-                }
-
-                hookRow(
-                    name: "CodeBuddy",
-                    installed: model.codebuddyHooksInstalled,
-                    busy: model.isCodebuddyHookSetupBusy,
-                    installAction: { model.installCodebuddyHooks() },
-                    uninstallAction: { confirmingUninstallCodebuddy = true }
-                )
-                .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallCodebuddy) {
-                    Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
-                        model.uninstallCodebuddyHooks()
-                    }
-                    Button(lang.t("settings.general.cancel"), role: .cancel) {}
-                } message: {
-                    Text("This will remove Open Island hooks from ~/.codebuddy/settings.json.")
-                }
-
-                hookRow(
-                    name: "Cursor",
-                    installed: model.cursorHooksInstalled,
-                    busy: model.isCursorHookSetupBusy,
-                    requiresBinary: true,
-                    installAction: { model.installCursorHooks() },
-                    uninstallAction: { confirmingUninstallCursor = true }
-                )
-                .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallCursor) {
-                    Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
-                        model.uninstallCursorHooks()
-                    }
-                    Button(lang.t("settings.general.cancel"), role: .cancel) {}
-                } message: {
-                    Text("This will remove the Open Island hooks from ~/.cursor/hooks.json.")
-                }
+            Section("Target systems") {
+                LabeledContent("Product lane", value: "OpenClaw + Hermes")
+                LabeledContent("OpenClaw status", value: model.openClawStatusTitle)
+                LabeledContent("Visibility", value: model.openClawStatusDetail)
+                LabeledContent("Visible rows", value: "\(model.productIslandListSessions.count)")
             }
 
-            Section {
-                HStack {
-                    Label(lang.t("setup.usageBridge"), systemImage: "chart.bar")
-                    Spacer()
-                    if model.claudeUsageInstalled {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Text(lang.t("setup.usageBridgeReady"))
-                                .foregroundStyle(.secondary)
-                        }
-                    } else if model.isClaudeUsageSetupBusy {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Button(lang.t("settings.general.install")) {
-                            model.installClaudeUsageBridge()
-                        }
-                    }
-                }
-            } header: {
-                HStack(spacing: 4) {
-                    Text(lang.t("setup.section.usage"))
-                    Text(lang.t("setup.optional"))
-                        .foregroundStyle(.tertiary)
-                }
+            Section("Hermes") {
+                Text("Hermes is currently rendered as an owner lane inside OpenClaw visibility. This fork does not assume a separate Hermes runtime bridge yet, so Hermes support stays metadata-first and additive.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
-            Section(lang.t("setup.section.permissions")) {
-                HStack(alignment: .top) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(lang.t("setup.permissionsTitle"))
-                            Text(lang.t("setup.permissionsDesc"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "lock.shield")
-                    }
-                    Spacer()
-                }
-            }
-
-            hookDiagnosticsSection
-
-            RemoteConnectionSection(model: model)
-
-            Section {
-                Button(lang.t("setup.installAll")) {
-                    if !model.claudeHooksInstalled { model.installClaudeHooks() }
-                    if !model.codexHooksInstalled { model.installCodexHooks() }
-                    if !model.openCodePluginInstalled { model.installOpenCodePlugin() }
-                    if !model.qoderHooksInstalled { model.installQoderHooks() }
-                    if !model.factoryHooksInstalled { model.installFactoryHooks() }
-                    if !model.codebuddyHooksInstalled { model.installCodebuddyHooks() }
-                    if !model.cursorHooksInstalled { model.installCursorHooks() }
-                    if !model.claudeUsageInstalled { model.installClaudeUsageBridge() }
-                }
-                .disabled(model.hooksBinaryURL == nil || allReady)
-                .frame(maxWidth: .infinity, alignment: .center)
+            Section("Fork policy") {
+                Text("This Xteam build intentionally hides upstream setup flows for Claude Code, Cursor, Gemini CLI, OpenCode, Qoder, Factory, and CodeBuddy. The legacy integrations remain in the codebase for low-risk upstream sync, but they are no longer part of the default product surface.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -524,9 +357,7 @@ struct SetupSettingsPane: View {
     }
 
     private var allReady: Bool {
-        model.claudeHooksInstalled && model.codexHooksInstalled && model.openCodePluginInstalled
-            && model.qoderHooksInstalled && model.factoryHooksInstalled && model.codebuddyHooksInstalled
-            && model.cursorHooksInstalled && model.claudeUsageInstalled
+        model.hasDetectedOpenClaw && model.productLiveSessionCount > 0
     }
 
     private var hasErrors: Bool {
