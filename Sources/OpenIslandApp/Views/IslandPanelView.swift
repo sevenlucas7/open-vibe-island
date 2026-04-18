@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 @preconcurrency import MarkdownUI
 import OpenIslandCore
@@ -134,25 +135,66 @@ struct IslandPanelView: View {
         }
     }
 
+    /// Collapsed spotlight: needsAttention first, else workingNow by newest, else nil.
+    /// Replaces the old spotlightScore-based selection with the new activity-state model.
     private var closedSpotlightSession: AgentSession? {
-        model.productSpotlightSession
+        let now = Date.now
+        let sessions = model.surfacedSessions
+
+        // Priority 1: any needsAttention session (first by recency).
+        let attentionSession = sessions
+            .filter { $0.activityState(at: now) == .needsAttention }
+            .max(by: { $0.updatedAt < $1.updatedAt })
+        if let s = attentionSession {
+            return s
+        }
+
+        // Priority 2: workingNow sessions sorted newest-first.
+        let workingNowSessions = sessions
+            .filter { $0.activityState(at: now) == .workingNow }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        if let s = workingNowSessions.first {
+            return s
+        }
+
+        return nil
     }
 
     private var hasClosedPresence: Bool {
-        model.productLiveSessionCount > 0
+        model.allAgentLiveSessionCount > 0
     }
 
-    /// Whether any session has activity worth showing in the closed notch
+    /// Whether any session has activity worth showing in the closed notch.
+    /// Uses the new activity-state model: needsAttention or workingNow qualify.
     private var hasClosedActivity: Bool {
         guard let session = closedSpotlightSession else {
             return false
         }
-        return session.phase == .running || session.phase.requiresAttention
+        let state = session.activityState(at: Date.now)
+        return state == .needsAttention || state == .workingNow
+    }
+
+    /// Activity-state token for the closed spotlight badge.
+    /// Uses the new activity-state model for consistency with sessionListContent.
+    private var closedSpotlightActivityToken: String {
+        guard let session = closedSpotlightSession else {
+            return "IDLE"
+        }
+        switch session.activityState(at: Date.now) {
+        case .needsAttention:
+            return "ATTN"
+        case .workingNow:
+            return "WORK"
+        case .doneRecently:
+            return "DONE"
+        case .stale:
+            return "IDLE"
+        }
     }
 
     /// Scout icon tint: blue if any running, green if any live, else gray.
     private var scoutTint: Color {
-        let sessions = model.productSurfacedSessions
+        let sessions = model.surfacedSessions
         if sessions.contains(where: { $0.phase == .running }) {
             return Color(red: 0.43, green: 0.62, blue: 1.0) // #6E9FFF working blue
         }
@@ -167,7 +209,7 @@ struct IslandPanelView: View {
             return closedRightAnchorWidth
         }
 
-        let digits = max(1, "\(model.productLiveSessionCount)".count)
+        let digits = max(1, "\(model.allAgentLiveSessionCount)".count)
         return CGFloat(26 + max(0, digits - 1) * 8)
     }
 
@@ -199,7 +241,8 @@ struct IslandPanelView: View {
             return false
         }
 
-        if closedSpotlightSession?.phase.requiresAttention == true {
+        // If the spotlight is showing a needsAttention session, suppress overflow badge.
+        if closedSpotlightSession?.activityState(at: Date.now) == .needsAttention {
             return false
         }
 
@@ -346,31 +389,41 @@ struct IslandPanelView: View {
             openedHeaderContent
                 .frame(height: closedNotchHeight)
         } else {
-            HStack(spacing: 0) {
-                if hasClosedPresence {
-                    ClosedSpotlightAgentView(
-                        session: closedSpotlightSession,
-                        identity: closedSpotlightSession.flatMap { model.identity(for: $0) }
-                    )
-                    .matchedGeometryEffect(id: "island-icon", in: notchNamespace, isSource: true)
-                    .frame(width: closedSpotlightWidth, alignment: .leading)
-                }
-
-                Spacer(minLength: hasClosedPresence ? closedCenterDeadZoneWidth : max(0, closedNotchWidth - 20))
-
-                if hasClosedPresence {
-                    ClosedCountBadge(
-                        statusToken: closedSpotlightSession?.spotlightCompactStatusToken ?? "IDLE",
-                        overflowCount: showsClosedOverflowToken ? model.spotlightOverflowCount : 0,
-                        tint: closedSpotlightSession?.phase.requiresAttention == true ? .orange : scoutTint
-                    )
-                    .matchedGeometryEffect(id: "right-indicator", in: notchNamespace, isSource: true)
-                    .frame(width: closedRightAnchorWidth, alignment: .trailing)
-                }
+            // Closed state: use TimelineView to periodically re-evaluate spotlightSession
+            // so the closed island switches to the currently active agent without needing
+            // the notch status to change.
+            TimelineView(.periodic(from: .now, by: 1.0)) { _ in
+                closedHeaderContent
             }
-            .frame(width: closedHeaderWidth, height: closedNotchHeight, alignment: .center)
-            .frame(height: closedNotchHeight)
         }
+    }
+
+    @ViewBuilder
+    private var closedHeaderContent: some View {
+        HStack(spacing: 0) {
+            if hasClosedPresence {
+                ClosedSpotlightAgentView(
+                    session: closedSpotlightSession,
+                    identity: closedSpotlightSession.flatMap { model.identity(for: $0) }
+                )
+                .matchedGeometryEffect(id: "island-icon", in: notchNamespace, isSource: true)
+                .frame(width: closedSpotlightWidth, alignment: .leading)
+            }
+
+            Spacer(minLength: hasClosedPresence ? closedCenterDeadZoneWidth : max(0, closedNotchWidth - 20))
+
+            if hasClosedPresence {
+                ClosedCountBadge(
+                    statusToken: closedSpotlightActivityToken,
+                    overflowCount: showsClosedOverflowToken ? model.spotlightOverflowCount : 0,
+                    tint: closedSpotlightSession?.activityState(at: Date.now) == .needsAttention ? .orange : scoutTint
+                )
+                .matchedGeometryEffect(id: "right-indicator", in: notchNamespace, isSource: true)
+                .frame(width: closedRightAnchorWidth, alignment: .trailing)
+            }
+        }
+        .frame(width: closedHeaderWidth, height: closedNotchHeight, alignment: .center)
+        .frame(height: closedNotchHeight)
     }
 
     @ViewBuilder
@@ -454,7 +507,7 @@ struct IslandPanelView: View {
 
             if model.shouldShowProductBootstrapPlaceholder {
                 sessionBootstrapPlaceholder
-            } else if model.productIslandListSessions.isEmpty {
+            } else if model.allAgentIslandListSessions.isEmpty {
                 emptyState
             } else {
                 sessionList
@@ -499,12 +552,26 @@ struct IslandPanelView: View {
         )
     }
 
+    /// Activity-state-based counts for islandSummaryStrip.
+    /// Mirrors the bucket logic used in sessionListContent so the summary pills
+    /// are consistent with the expanded section headers.
+    private func activityStateCounts(at referenceDate: Date) -> (workingNow: Int, needsAttention: Int, doneRecently: Int) {
+        let sessions = model.surfacedSessions
+        let workingNow = sessions.filter { $0.activityState(at: referenceDate) == .workingNow }.count
+        let needsAttention = sessions.filter { $0.activityState(at: referenceDate) == .needsAttention }.count
+        let doneRecently = sessions.filter { $0.activityState(at: referenceDate) == .doneRecently }.count
+        return (workingNow, needsAttention, doneRecently)
+    }
+
     private var islandSummaryStrip: some View {
-        HStack(spacing: 8) {
-            headerPill("Active \(model.productActiveAgentCount)", tint: .white.opacity(0.92))
-            headerPill("Approval \(model.productApprovalCount)", tint: model.productApprovalCount > 0 ? .orange.opacity(0.96) : .white.opacity(0.52))
-            headerPill("Done \(model.productDoneCount)", tint: .white.opacity(0.52))
-            Spacer(minLength: 0)
+        TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
+            let counts = activityStateCounts(at: timeline.date)
+            HStack(spacing: 8) {
+                headerPill("Working \(counts.workingNow)", tint: .white.opacity(0.92))
+                headerPill("Needs Attention \(counts.needsAttention)", tint: counts.needsAttention > 0 ? .orange.opacity(0.96) : .white.opacity(0.52))
+                headerPill("Done Recently \(counts.doneRecently)", tint: .white.opacity(0.52))
+                Spacer(minLength: 0)
+            }
         }
     }
 
@@ -554,7 +621,7 @@ struct IslandPanelView: View {
     private static let maxSessionListHeight: CGFloat = 560
 
     private var sessionList: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
+        TimelineView(.periodic(from: .now, by: 5)) { context in
             if isNotificationMode {
                 // Notification mode: NO ScrollView — content sizes naturally
                 sessionListContent(context: context)
@@ -582,7 +649,7 @@ struct IslandPanelView: View {
                     .frame(maxHeight: Self.maxSessionListHeight)
                     .focusable()
                     .onAppear {
-                        keyboardSelectedSessionID = keyboardSelectedSessionID ?? model.productSpotlightSession?.id
+                        keyboardSelectedSessionID = keyboardSelectedSessionID ?? model.spotlightSession?.id
                     }
                     .onMoveCommand { direction in
                         handleMoveCommand(direction, proxy: proxy)
@@ -609,12 +676,12 @@ struct IslandPanelView: View {
                     onJump: { model.jumpToSession(session) }
                 )
 
-                if model.productIslandListSessions.count > 1 {
+                if model.allAgentIslandListSessions.count > 1 {
                     Button {
                         let isCompletion = session.phase == .completed
                         model.expandNotificationToSessionList(clearExpansion: isCompletion)
                     } label: {
-                        Text(model.lang.t("island.showAll", model.productIslandListSessions.count))
+                        Text(model.lang.t("island.showAll", model.allAgentIslandListSessions.count))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white.opacity(0.45))
                             .frame(maxWidth: .infinity)
@@ -623,35 +690,38 @@ struct IslandPanelView: View {
                     .buttonStyle(.plain)
                 }
             } else {
-                if let approvalSession = model.productApprovalPinnedSession {
-                    sessionSectionHeader("Attention")
-                    sessionRowView(for: approvalSession, at: context.date)
-                        .id(approvalSession.id)
-                }
+                // New activity-state model: four buckets, stale excluded.
+                let now = context.date
+                let needsAttentionSessions = model.surfacedSessions
+                    .filter { $0.activityState(at: now) == .needsAttention }
+                    .sorted { $0.updatedAt > $1.updatedAt }
+                let workingNowSessions = model.surfacedSessions
+                    .filter { $0.activityState(at: now) == .workingNow }
+                    .sorted { $0.updatedAt > $1.updatedAt }
+                let doneRecentlySessions = model.surfacedSessions
+                    .filter { $0.activityState(at: now) == .doneRecently }
+                    .sorted { $0.updatedAt > $1.updatedAt }
 
-                let remainingAttention = model.productAttentionSessions.filter { $0.id != model.productApprovalPinnedSession?.id }
-                if !remainingAttention.isEmpty {
-                    if model.productApprovalPinnedSession == nil {
-                        sessionSectionHeader("Attention")
-                    }
-                    ForEach(remainingAttention) { session in
-                        sessionRowView(for: session, at: context.date)
+                if !needsAttentionSessions.isEmpty {
+                    sessionSectionHeader("Needs Attention")
+                    ForEach(needsAttentionSessions) { session in
+                        sessionRowView(for: session, at: now)
                             .id(session.id)
                     }
                 }
 
-                if !model.productActiveSessions.isEmpty {
-                    sessionSectionHeader("Active")
-                    ForEach(model.productActiveSessions) { session in
-                        sessionRowView(for: session, at: context.date)
+                if !workingNowSessions.isEmpty {
+                    sessionSectionHeader("Working Now")
+                    ForEach(workingNowSessions) { session in
+                        sessionRowView(for: session, at: now)
                             .id(session.id)
                     }
                 }
 
-                if !model.productRecentCompletedSessions.isEmpty {
-                    sessionSectionHeader("Recent")
-                    ForEach(model.productRecentCompletedSessions.prefix(8)) { session in
-                        sessionRowView(for: session, at: context.date)
+                if !doneRecentlySessions.isEmpty {
+                    sessionSectionHeader("Done Recently")
+                    ForEach(doneRecentlySessions.prefix(8)) { session in
+                        sessionRowView(for: session, at: now)
                             .id(session.id)
                     }
                 }
@@ -685,15 +755,21 @@ struct IslandPanelView: View {
         )
     }
 
+    /// Keyboard-navigable session IDs in the same order as the expanded list:
+    /// needsAttention → workingNow → doneRecently.
     private var navigableSessionIDs: [String] {
-        var ids: [String] = []
-        if let approvalID = model.productApprovalPinnedSession?.id {
-            ids.append(approvalID)
-        }
-        ids.append(contentsOf: model.productAttentionSessions.map(\.id).filter { $0 != model.productApprovalPinnedSession?.id })
-        ids.append(contentsOf: model.productActiveSessions.map(\.id))
-        ids.append(contentsOf: model.productRecentCompletedSessions.prefix(8).map(\.id))
-        return ids
+        let now = Date.now
+        let needsAttention = model.surfacedSessions
+            .filter { $0.activityState(at: now) == .needsAttention }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        let workingNow = model.surfacedSessions
+            .filter { $0.activityState(at: now) == .workingNow }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        let doneRecently = model.surfacedSessions
+            .filter { $0.activityState(at: now) == .doneRecently }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(8)
+        return (needsAttention + workingNow + Array(doneRecently)).map { $0.id }
     }
 
     private func handleMoveCommand(_ direction: MoveCommandDirection, proxy: ScrollViewProxy) {
@@ -1186,6 +1262,10 @@ private struct IslandSessionRow: View {
             HStack(alignment: .top, spacing: 14) {
                 statusDot(for: presence)
 
+                // Asset-backed avatar: renders when avatarImageName is set and asset exists.
+                sessionAvatarIcon
+                    .frame(width: 18, height: 18)
+
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(session.spotlightHeadlineText)
@@ -1366,6 +1446,21 @@ private struct IslandSessionRow: View {
 
     private var displayBlockerSummary: String? {
         model.displayBlockerSummary(for: session)
+    }
+
+    /// Image asset-backed avatar. Only renders when avatarImageName is set
+    /// and the bundle image is successfully loaded. Falls back to EmptyView.
+    private var sessionAvatarIcon: some View {
+        if let imageName = displayIdentity?.avatarImageName,
+           let nsImage = Bundle.appResources.image(forResource: imageName) {
+            return AnyView(
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .clipShape(Circle())
+            )
+        }
+        return AnyView(EmptyView())
     }
 
     private var metadataBadges: [BadgeModel] {
@@ -1832,19 +1927,24 @@ private struct IslandSessionRow: View {
     @ViewBuilder
     private func statusDot(for presence: IslandSessionPresence) -> some View {
         let tint = statusTint(for: presence)
-        let shouldPulse = session.phase == .running && presence != .inactive
+        // Use phase == .running directly so the animation fires reliably.
+        // islandPresence can return .inactive for stale-but-running sessions
+        // (e.g. long stretches with no output), but we still want the dot to
+        // pulse when the agent is actively processing.
+        let isRunning = session.phase == .running
 
-        if shouldPulse {
-            // B1.5 MVP: subtle alive pulse — breath, not bounce.
-            // Uses .periodic to drive a sine-wave opacity: 0.48 → 1.0.
-            TimelineView(.periodic(from: .now, by: 0.07)) { timeline in
+        if isRunning {
+            // Prominent running pulse: sine-wave breathing combined with subtle scale.
+            // The scale (1.0 → 1.3 → 1.0) gives a clear "alive" cue even at small sizes.
+            TimelineView(.periodic(from: .now, by: 0.08)) { timeline in
                 let elapsed = timeline.date.timeIntervalSinceReferenceDate
                 let phase = sin(elapsed * 0.45)
-                let opacity = 0.48 + (1.0 - 0.48) * max(0, phase)
+                let breathOpacity = 0.50 + (1.0 - 0.50) * max(0, phase)
+                let scale = 1.0 + 0.28 * max(0, phase)
                 Circle()
                     .fill(tint)
-                    .opacity(opacity)
-                    .frame(width: 9, height: 9)
+                    .opacity(breathOpacity)
+                    .frame(width: 9 * scale, height: 9 * scale)
                     .padding(.top, 6)
             }
         } else {
@@ -2323,6 +2423,13 @@ private struct ClosedSpotlightAgentView: View {
     let session: AgentSession?
     let identity: AppModel.AgentIdentity?
 
+    /// Image asset name from AgentIdentity.avatarImageName.
+    /// When non-nil, the bundle image is rendered instead of the
+    /// OpenIslandBrandMark preset.
+    private var avatarImageName: String? {
+        identity?.avatarImageName
+    }
+
     private var avatarPreset: OpenIslandBrandMark.Preset {
         guard let key = identity?.avatarPresetKey,
               let preset = OpenIslandBrandMark.Preset(rawValue: key) else {
@@ -2340,9 +2447,15 @@ private struct ClosedSpotlightAgentView: View {
         session?.spotlightShortLabel ?? identity?.shortLabel ?? "AGT"
     }
 
+    /// Whether the bundle image asset is available (image exists in asset catalog).
+    private var hasAvatarAsset: Bool {
+        guard let imageName = avatarImageName else { return false }
+        return Bundle.appResources.image(forResource: imageName) != nil
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            OpenIslandIcon(size: Self.iconSize, isAnimating: session?.phase == .running, tint: tint, preset: avatarPreset)
+            avatarIcon
                 .frame(width: Self.iconSize, height: Self.iconSize)
 
             HStack(spacing: 4) {
@@ -2350,7 +2463,7 @@ private struct ClosedSpotlightAgentView: View {
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.94))
 
-                if session?.phase.requiresAttention == true {
+                if session?.activityState(at: Date.now) == .needsAttention {
                     AttentionIndicator(size: 10, color: .orange)
                 }
             }
@@ -2358,6 +2471,25 @@ private struct ClosedSpotlightAgentView: View {
         }
         .padding(.leading, Self.leadingInset)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var avatarIcon: some View {
+        if let imageName = avatarImageName, hasAvatarAsset {
+            // Asset-backed avatar: renders the formal image asset.
+            Image(nsImage: Bundle.appResources.image(forResource: imageName) ?? NSImage())
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .clipShape(Circle())
+        } else {
+            // Fallback: renders the OpenIslandBrandMark preset.
+            OpenIslandIcon(
+                size: Self.iconSize,
+                isAnimating: session?.activityState(at: Date.now) == .workingNow,
+                tint: tint,
+                preset: avatarPreset
+            )
+        }
     }
 }
 
@@ -2370,7 +2502,7 @@ struct MenuBarContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(model.lang.t("app.name.oss"))
                 .font(.headline)
-            Text(model.lang.t("menu.status", model.productLiveSessionCount, model.productApprovalCount))
+            Text(model.lang.t("menu.status", model.allAgentLiveSessionCount, model.allAgentApprovalCount))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 

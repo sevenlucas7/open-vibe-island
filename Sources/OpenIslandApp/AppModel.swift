@@ -13,6 +13,10 @@ final class AppModel {
         var ownerColor: Color
         var avatarPresetKey: String
         var animationProfileKey: String
+        /// Optional image asset name (in Assets.xcassets or bundle Resources).
+        /// When set, IslandPanelView renders this image instead of the
+        /// OpenIslandBrandMark preset. Falls back to preset when nil.
+        var avatarImageName: String?
     }
 
     private static let soundMutedDefaultsKey = "overlay.sound.muted"
@@ -46,12 +50,12 @@ final class AppModel {
         .geminiCLI: "Momo",
     ]
     private static let canonicalAgentIdentities: [String: AgentIdentity] = [
-        "seven": AgentIdentity(displayName: "Seven", shortLabel: "SEV", ownerColor: Color(red: 0.37, green: 0.92, blue: 0.83), avatarPresetKey: "scout", animationProfileKey: "pulse"),
-        "luvian": AgentIdentity(displayName: "Luvian", shortLabel: "LUV", ownerColor: Color(red: 0.31, green: 0.79, blue: 0.71), avatarPresetKey: "orb", animationProfileKey: "drift"),
-        "fanshu": AgentIdentity(displayName: "Fanshu", shortLabel: "FAN", ownerColor: Color(red: 0.96, green: 0.45, blue: 0.71), avatarPresetKey: "flare", animationProfileKey: "flicker"),
-        "pipi": AgentIdentity(displayName: "Pipi", shortLabel: "PIP", ownerColor: Color(red: 0.38, green: 0.65, blue: 0.98), avatarPresetKey: "array", animationProfileKey: "scan"),
-        "momo": AgentIdentity(displayName: "Momo", shortLabel: "MOM", ownerColor: Color(red: 0.65, green: 0.55, blue: 0.98), avatarPresetKey: "halo", animationProfileKey: "glow"),
-        "hermes": AgentIdentity(displayName: "Hermes", shortLabel: "HRM", ownerColor: Color(red: 0.96, green: 0.73, blue: 0.31), avatarPresetKey: "halo", animationProfileKey: "glow"),
+        "seven": AgentIdentity(displayName: "Seven", shortLabel: "SEV", ownerColor: Color(red: 0.37, green: 0.92, blue: 0.83), avatarPresetKey: "scout", animationProfileKey: "pulse", avatarImageName: "AvatarSeven"),
+        "luvian": AgentIdentity(displayName: "Luvian", shortLabel: "LUV", ownerColor: Color(red: 0.31, green: 0.79, blue: 0.71), avatarPresetKey: "orb", animationProfileKey: "drift", avatarImageName: "AvatarLuvian"),
+        "fanshu": AgentIdentity(displayName: "Fanshu", shortLabel: "FAN", ownerColor: Color(red: 0.96, green: 0.45, blue: 0.71), avatarPresetKey: "flare", animationProfileKey: "flicker", avatarImageName: "AvatarFanshu"),
+        "pipi": AgentIdentity(displayName: "Pipi", shortLabel: "PIP", ownerColor: Color(red: 0.38, green: 0.65, blue: 0.98), avatarPresetKey: "array", animationProfileKey: "scan", avatarImageName: "AvatarPipi"),
+        "momo": AgentIdentity(displayName: "Momo", shortLabel: "MOM", ownerColor: Color(red: 0.65, green: 0.55, blue: 0.98), avatarPresetKey: "halo", animationProfileKey: "glow", avatarImageName: "AvatarMomo"),
+        "hermes": AgentIdentity(displayName: "Hermes", shortLabel: "HRM", ownerColor: Color(red: 0.96, green: 0.73, blue: 0.31), avatarPresetKey: "halo", animationProfileKey: "glow", avatarImageName: "AvatarHermes"),
     ]
     static let hoverOpenDelay: TimeInterval = 0.15
 
@@ -77,6 +81,11 @@ final class AppModel {
     let discovery = SessionDiscoveryCoordinator()
     let monitoring = ProcessMonitoringCoordinator()
     let updateChecker = UpdateChecker()
+    /// Authoritative read-model for OpenClaw sessions.
+    /// Seeded at startup from OpenClawDiscovery, updated on every bridge event.
+    /// Replaces fragile terminal-attachment probing as the truth source for
+    /// OpenClaw session existence, phase, summary, and priority.
+    let openClawAdapter = OpenClawStateAdapter()
 
     var notchStatus: NotchStatus {
         get { overlay.notchStatus }
@@ -359,6 +368,37 @@ final class AppModel {
         surfacedSessions
     }
 
+    /// All surfaced sessions without the product (OpenClaw / Hermes-only) filter.
+    /// Used by the island panel to render every active agent.
+    var allAgentIslandListSessions: [AgentSession] {
+        surfacedSessions
+    }
+
+    var allAgentLiveSessionCount: Int {
+        surfacedSessions.count
+    }
+
+    var allAgentActiveSessions: [AgentSession] {
+        surfacedSessions.filter { !$0.phase.requiresAttention && $0.phase == .running }
+    }
+
+    var allAgentAttentionSessions: [AgentSession] {
+        surfacedSessions.filter { $0.phase.requiresAttention }
+    }
+
+    var allAgentApprovalPinnedSession: AgentSession? {
+        allAgentAttentionSessions.first(where: { $0.phase == .waitingForApproval })
+    }
+
+    var allAgentApprovalCount: Int {
+        state.sessions.filter { $0.phase == .waitingForApproval }.count
+    }
+
+    var allAgentRecentCompletedSessions: [AgentSession] {
+        let surfacedIDs = Set(surfacedSessions.map(\.id))
+        return state.sessions.filter { !surfacedIDs.contains($0.id) || $0.phase == .completed }
+    }
+
     var recentSessionCount: Int {
         recentSessions.count
     }
@@ -397,8 +437,12 @@ final class AppModel {
         state.sessions.filter { $0.tool == .openClaw }
     }
 
+    /// OpenClaw sessions surfaced in the island, from the authoritative adapter.
+    /// Replaces the old derivation from filtered `surfacedSessions` — now driven
+    /// by bridge events and startup discovery via `openClawAdapter`, not by
+    /// terminal-attachment heuristics.
     var surfacedOpenClawSessions: [AgentSession] {
-        surfacedSessions.filter { $0.tool == .openClaw }
+        openClawAdapter.surfacedSessions
     }
 
     var productSurfacedSessions: [AgentSession] {
@@ -471,8 +515,23 @@ final class AppModel {
         isResolvingInitialLiveSessions && productLiveSessionCount == 0 && openClawAvailability == nil
     }
 
+    /// Collapsed spotlight using the new activity-state model:
+    /// needsAttention first (newest within that tier), else workingNow (newest), else nil.
     var spotlightSession: AgentSession? {
-        surfacedSessions.max(by: { spotlightScore(for: $0) < spotlightScore(for: $1) })
+        let now = Date.now
+        // Priority 1: needsAttention (newest first).
+        if let s = surfacedSessions
+            .filter({ $0.activityState(at: now) == .needsAttention })
+            .max(by: { $0.updatedAt < $1.updatedAt }) {
+            return s
+        }
+        // Priority 2: workingNow (newest first).
+        if let s = surfacedSessions
+            .filter({ $0.activityState(at: now) == .workingNow })
+            .max(by: { $0.updatedAt < $1.updatedAt }) {
+            return s
+        }
+        return nil
     }
 
     var spotlightIdentity: AgentIdentity? {
@@ -1049,6 +1108,11 @@ final class AppModel {
         }
 
         state.apply(event)
+        // Push bridge events into the authoritative OpenClaw read-model adapter.
+        // The adapter filters internally so non-OpenClaw events are no-ops.
+        // This keeps the adapter in sync with the bridge's hook-event stream,
+        // displacing fragile terminal-attachment probing as the truth source.
+        openClawAdapter.applyBridgeEvent(event)
         reconcileIslandSurfaceAfterStateChange()
         if ingress == .bridge {
             monitoring.markSessionAttached(for: event)
@@ -1096,6 +1160,12 @@ final class AppModel {
         openClawAvailability = payload.openClawAvailability
         openClawTeamStoreCount = payload.openClawTeamStoreCount
         openClawRecentOwnerCount = payload.openClawRecentOwnerCount
+
+        // Seed the authoritative OpenClaw read-model adapter.
+        // The adapter is now the primary truth source for OpenClaw sessions,
+        // replacing terminal-attachment probing. It will stay current via
+        // bridge events in `applyTrackedEvent`.
+        openClawAdapter.seedFromStartupPayload(OpenClawDiscoveryPayload(sessions: payload.discoveredOpenClawSessions))
 
         // Apply hooks binary URL and update the installed copy if the app ships a newer version.
         hooks.hooksBinaryURL = payload.hooksBinaryURL

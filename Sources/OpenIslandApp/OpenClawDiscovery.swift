@@ -205,7 +205,8 @@ struct OpenClawDiscovery {
                 })
             let representativeTask = selectRepresentativeTask(
                 for: representativeSession,
-                from: tasksByOwner[owner.displayName] ?? []
+                from: tasksByOwner[owner.displayName] ?? [],
+                now: now
             )
 
             if let representativeSession {
@@ -227,7 +228,8 @@ struct OpenClawDiscovery {
 
     private func selectRepresentativeTask(
         for session: RawSession?,
-        from tasks: [RawTask]
+        from tasks: [RawTask],
+        now: Date
     ) -> RawTask? {
         if let session {
             let exactMatch = tasks.filter {
@@ -238,6 +240,19 @@ struct OpenClawDiscovery {
                 Self.taskSortWeight(lhs: lhs, rhs: rhs)
             }) {
                 return matched
+            }
+
+            // No task matches the session key exactly. If the session is a
+            // recent direct session, prefer NO task over an unrelated cron task
+            // so that inferredPhase falls back to session recency instead of
+            // being anchored to a completed cron task phase.
+            let normalizedKey = Self.normalizedLookupKey(from: session.key) ?? ""
+            let isRecentDirectSession = normalizedKey.contains("direct")
+                && !normalizedKey.contains("cron")
+                && now.timeIntervalSince(session.updatedAt) <= Self.runningSessionWindow
+
+            if isRecentDirectSession {
+                return nil
             }
         }
 
@@ -362,6 +377,12 @@ struct OpenClawDiscovery {
         case .running:
             return .running
         case .completed:
+            // Defensive: if the session itself is recent, treat it as running
+            // even if the representative task is completed. This prevents a
+            // completed cron task from downgrading a live direct session.
+            if now.timeIntervalSince(updatedAt) <= Self.runningSessionWindow {
+                return .running
+            }
             return .completed
         case .blocked:
             return .running

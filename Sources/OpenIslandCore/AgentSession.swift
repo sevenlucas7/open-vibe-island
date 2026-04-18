@@ -118,6 +118,30 @@ public enum SessionPriority: String, Codable, Sendable {
     case low
 }
 
+// MARK: - Activity State
+
+/// Activity-state classification for the island's collapsed focus and expanded grouping.
+///
+/// This model replaces the old mixed scoring approach with a clear, user-facing
+/// three-tier hierarchy:
+/// - `needsAttention`: Agent is waiting for user input (approval, answer). Highest priority.
+/// - `workingNow`: Agent is actively processing or was recently active.
+/// - `doneRecently`: Agent completed work within a recent window. Shown in expanded view.
+/// - `stale`: Agent has been inactive beyond the recent window. Hidden from expanded view.
+public enum ActivityState: String, CaseIterable, Sendable {
+    /// Agent is blocked waiting for user action — approval prompt or question.
+    case needsAttention
+
+    /// Agent is actively processing or was recently active (within the threshold).
+    case workingNow
+
+    /// Agent completed work recently but is no longer active.
+    case doneRecently
+
+    /// Agent has been inactive beyond the recent window.
+    case stale
+}
+
 public struct JumpTarget: Equatable, Codable, Sendable {
     public var terminalApp: String
     public var workspaceName: String
@@ -501,7 +525,7 @@ public extension AgentSession {
     }
 
     var isTrackedLiveSession: Bool {
-        !isDemoSession && (tool == .codex || tool == .claudeCode || tool == .openCode || tool == .qoder || tool == .factory || tool == .codebuddy || tool == .cursor)
+        !isDemoSession && (tool == .codex || tool == .claudeCode || tool == .openCode || tool == .openClaw || tool == .qoder || tool == .factory || tool == .codebuddy || tool == .cursor)
     }
 
     var isTrackedLiveCodexSession: Bool {

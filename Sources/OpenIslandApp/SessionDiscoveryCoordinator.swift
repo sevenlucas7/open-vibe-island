@@ -214,7 +214,13 @@ final class SessionDiscoveryCoordinator {
 
         if discoveredIsNewer {
             merged.title = discovered.title
-            merged.phase = discovered.phase
+            // Preserve .running phase from the discovered session only if the
+            // existing session is not already running. This prevents a
+            // completed cron task discovered for the same owner from
+            // overwriting a live direct session's running phase.
+            if merged.phase != .running || discovered.phase == .running {
+                merged.phase = discovered.phase
+            }
             merged.summary = discovered.summary
             merged.updatedAt = discovered.updatedAt
             merged.permissionRequest = discovered.permissionRequest

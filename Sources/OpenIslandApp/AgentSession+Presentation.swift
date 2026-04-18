@@ -404,6 +404,54 @@ extension AgentSession {
     }
 }
 
+// MARK: - Activity State Extension
+
+/// Staleness threshold: sessions inactive beyond this are `stale`.
+/// Matches the existing `islandActivityThreshold` of 20 minutes.
+private let activityStateStaleThreshold: TimeInterval = 20 * 60
+
+/// Done-recently threshold: completed sessions within this window are `doneRecently`.
+/// Completed sessions older than this are `stale`.
+private let activityStateDoneRecentlyThreshold: TimeInterval = 20 * 60
+
+public extension AgentSession {
+    /// Classifies this session into one of four activity states.
+    /// Used by the collapsed spotlight selector and the expanded section grouper.
+    /// Replaces the old mixed scoring / spotlightScore approach with a clear tier model.
+    func activityState(at referenceDate: Date) -> ActivityState {
+        // needsAttention always takes absolute priority.
+        if phase == .waitingForApproval || phase == .waitingForAnswer {
+            return .needsAttention
+        }
+
+        // A truly running session must stay in workingNow regardless of age.
+        // Previously, recently completed sessions were also promoted into
+        // workingNow here because `updatedAt` was still fresh, which let them
+        // outrank the actually working agent in Active and pushed the real live
+        // agent down into Done Recently / Complete.
+        if phase == .running || isProcessAlive {
+            return .workingNow
+        }
+
+        // doneRecently: completed within the recent window.
+        if phase == .completed {
+            let age = referenceDate.timeIntervalSince(islandActivityDate)
+            if age <= activityStateDoneRecentlyThreshold {
+                return .doneRecently
+            }
+        }
+
+        // Non-completed sessions can still read as workingNow for a short time
+        // after their latest update, even if process liveness has not yet been
+        // observed again.
+        if referenceDate.timeIntervalSince(islandActivityDate) <= activityStateStaleThreshold {
+            return .workingNow
+        }
+
+        return .stale
+    }
+}
+
 private extension String {
     var trimmedForSurface: String {
         trimmingCharacters(in: .whitespacesAndNewlines)
